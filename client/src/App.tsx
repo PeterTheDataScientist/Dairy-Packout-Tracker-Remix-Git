@@ -12,6 +12,7 @@ import Formulas from "@/pages/Formulas";
 import Approvals from "@/pages/Approvals";
 import Packouts from "@/pages/Packouts";
 import Reports from "@/pages/Reports";
+import MyHistory from "@/pages/MyHistory";
 
 // Simple Intake Placeholder
 function Intake() { 
@@ -35,6 +36,7 @@ function Router() {
         <Route path="/products" component={Products} />
         <Route path="/formulas" component={Formulas} />
         <Route path="/approvals" component={Approvals} />
+        <Route path="/my-history" component={MyHistory} />
         <Route component={NotFound} />
       </Switch>
     </MainLayout>

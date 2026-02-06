@@ -18,9 +18,9 @@ import {
   FileBarChart, 
   Settings, 
   ShieldCheck, 
-  LogOut,
   Menu,
-  Beaker
+  Beaker,
+  History
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useStore } from "@/lib/mockStore";
@@ -32,13 +32,18 @@ export function AppSidebar() {
   const { currentUser } = useStore();
 
   const isActive = (path: string) => location === path;
+  const isDataEntry = currentUser.role === 'DATA_ENTRY';
 
   const menuItems = [
     { title: "Dashboard", icon: LayoutDashboard, path: "/" },
     { title: "Intake", icon: Milk, path: "/intake" },
     { title: "Production", icon: Factory, path: "/production" },
     { title: "Packouts", icon: Package, path: "/packouts" },
-    { title: "Reports", icon: FileBarChart, path: "/reports" },
+    // Show My History for Data Entry, Reports for Admin
+    ...(isDataEntry 
+      ? [{ title: "My History", icon: History, path: "/my-history" }]
+      : [{ title: "Reports", icon: FileBarChart, path: "/reports" }]
+    ),
   ];
 
   const adminItems = [
@@ -82,25 +87,27 @@ export function AppSidebar() {
           ))}
         </SidebarMenu>
 
-        <SidebarMenu>
-          <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider mt-4">
-            Administration
-          </div>
-          {adminItems.map((item) => (
-            <SidebarMenuItem key={item.path}>
-              <Link href={item.path}>
-                <SidebarMenuButton 
-                  isActive={isActive(item.path)}
-                  tooltip={item.title}
-                  className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground hover:bg-sidebar-accent/50 transition-all duration-200"
-                >
-                  <item.icon className="h-4 w-4" />
-                  <span>{item.title}</span>
-                </SidebarMenuButton>
-              </Link>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
+        {!isDataEntry && (
+          <SidebarMenu>
+            <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground/70 uppercase tracking-wider mt-4">
+              Administration
+            </div>
+            {adminItems.map((item) => (
+              <SidebarMenuItem key={item.path}>
+                <Link href={item.path}>
+                  <SidebarMenuButton 
+                    isActive={isActive(item.path)}
+                    tooltip={item.title}
+                    className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground hover:bg-sidebar-accent/50 transition-all duration-200"
+                  >
+                    <item.icon className="h-4 w-4" />
+                    <span>{item.title}</span>
+                  </SidebarMenuButton>
+                </Link>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="p-4 border-t border-sidebar-border/50">
