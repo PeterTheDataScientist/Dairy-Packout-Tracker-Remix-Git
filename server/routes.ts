@@ -195,6 +195,60 @@ export async function registerRoutes(
     }
   });
 
+  app.put("/api/formulas/:id", requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const existing = await storage.getFormula(id);
+      if (!existing) return res.status(404).json({ error: "Not found" });
+
+      const { conversion, components, ...formulaUpdates } = req.body;
+
+      const allowedUpdates: any = {};
+      if (formulaUpdates.name !== undefined) allowedUpdates.name = formulaUpdates.name;
+      if (formulaUpdates.outputProductId !== undefined) allowedUpdates.outputProductId = formulaUpdates.outputProductId;
+      if (formulaUpdates.active !== undefined) allowedUpdates.active = formulaUpdates.active;
+
+      if (Object.keys(allowedUpdates).length > 0) {
+        await storage.updateFormula(id, allowedUpdates);
+      }
+
+      if (existing.type === "CONVERSION" && conversion) {
+        const convUpdates: any = {};
+        if (conversion.inputProductId !== undefined) convUpdates.inputProductId = conversion.inputProductId;
+        if (conversion.ratioNumerator !== undefined) convUpdates.ratioNumerator = conversion.ratioNumerator;
+        if (conversion.ratioDenominator !== undefined) convUpdates.ratioDenominator = conversion.ratioDenominator;
+        if (Object.keys(convUpdates).length > 0) {
+          await storage.updateConversionFormula(id, convUpdates);
+        }
+      }
+
+      if (existing.type === "BLEND" && components) {
+        await storage.deleteBlendComponentsByFormulaId(id);
+        for (const comp of components) {
+          await storage.createBlendComponent({ formulaId: id, ...comp });
+        }
+      }
+
+      const updated = await storage.getFormula(id);
+      await storage.createEvent({
+        actorUserId: req.user!.id,
+        entityType: "formula",
+        entityId: id,
+        action: "UPDATE",
+        ipAddress: req.ip || null,
+        fieldName: null,
+        oldValue: JSON.stringify(existing),
+        newValue: JSON.stringify(req.body),
+        reason: null,
+        metadataJson: null,
+      });
+
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
   // --- DAILY INTAKES ---
   app.get("/api/intakes", requireAuth, async (req, res) => {
     const { dateFrom, dateTo } = req.query;

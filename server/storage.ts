@@ -38,11 +38,13 @@ export interface IStorage {
   getFormulas(): Promise<Formula[]>;
   getFormula(id: number): Promise<Formula | undefined>;
   createFormula(f: InsertFormula): Promise<Formula>;
+  updateFormula(id: number, updates: Partial<InsertFormula>): Promise<Formula | undefined>;
   getFormulasByOutputProduct(productId: number): Promise<Formula[]>;
 
   // Conversion Formulas
   getConversionByFormulaId(formulaId: number): Promise<ConversionFormula | undefined>;
   createConversionFormula(c: InsertConversionFormula): Promise<ConversionFormula>;
+  updateConversionFormula(formulaId: number, updates: { inputProductId?: number; ratioNumerator?: string; ratioDenominator?: string }): Promise<ConversionFormula | undefined>;
 
   // Blend Components
   getBlendComponentsByFormulaId(formulaId: number): Promise<BlendComponent[]>;
@@ -164,6 +166,11 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async updateFormula(id: number, updates: Partial<InsertFormula>) {
+    const [updated] = await db.update(formulas).set(updates).where(eq(formulas.id, id)).returning();
+    return updated;
+  }
+
   async getFormulasByOutputProduct(productId: number) {
     return db.select().from(formulas).where(
       and(eq(formulas.outputProductId, productId), eq(formulas.active, true))
@@ -179,6 +186,11 @@ export class DatabaseStorage implements IStorage {
   async createConversionFormula(c: InsertConversionFormula) {
     const [created] = await db.insert(conversionFormulas).values(c).returning();
     return created;
+  }
+
+  async updateConversionFormula(formulaId: number, updates: { inputProductId?: number; ratioNumerator?: string; ratioDenominator?: string }) {
+    const [updated] = await db.update(conversionFormulas).set(updates).where(eq(conversionFormulas.formulaId, formulaId)).returning();
+    return updated;
   }
 
   // Blend Components

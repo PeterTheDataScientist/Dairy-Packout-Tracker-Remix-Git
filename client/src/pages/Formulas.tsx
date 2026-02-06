@@ -8,9 +8,10 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Pencil } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent } from "@/components/ui/card";
+import { Switch } from "@/components/ui/switch";
 
 type Product = { id: number; name: string; unitType: string };
 type FormulaWithDetails = {
@@ -24,12 +25,14 @@ type BlendComp = { componentProductId: string; fraction: string };
 export default function Formulas() {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingFormula, setEditingFormula] = useState<FormulaWithDetails | null>(null);
   const [formulaType, setFormulaType] = useState<"CONVERSION" | "BLEND">("CONVERSION");
   const [name, setName] = useState("");
   const [outputProductId, setOutputProductId] = useState("");
   const [inputProductId, setInputProductId] = useState("");
   const [ratioNum, setRatioNum] = useState("");
   const [ratioDen, setRatioDen] = useState("");
+  const [isActive, setIsActive] = useState(true);
   const [components, setComponents] = useState<BlendComp[]>([]);
 
   const { data: formulas = [] } = useQuery<FormulaWithDetails[]>({ queryKey: ["/api/formulas"] });
@@ -45,6 +48,21 @@ export default function Formulas() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/formulas"] });
       toast({ title: "Formula Created" });
+      setIsDialogOpen(false);
+    },
+    onError: (err: any) => {
+      toast({ variant: "destructive", title: "Error", description: err.message });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, ...data }: any) => {
+      const res = await apiRequest("PUT", `/api/formulas/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/formulas"] });
+      toast({ title: "Formula Updated" });
       setIsDialogOpen(false);
     },
     onError: (err: any) => {
@@ -68,11 +86,8 @@ export default function Formulas() {
 
     const body: any = {
       name,
-      type: formulaType,
       outputProductId: parseInt(outputProductId),
-      active: true,
-      version: 1,
-      inputBasis: "PER_UNIT_OUTPUT",
+      active: isActive,
     };
 
     if (formulaType === "CONVERSION") {
@@ -88,11 +103,49 @@ export default function Formulas() {
       }));
     }
 
-    createMutation.mutate(body);
+    if (editingFormula) {
+      updateMutation.mutate({ id: editingFormula.id, ...body });
+    } else {
+      body.type = formulaType;
+      body.version = 1;
+      body.inputBasis = "PER_UNIT_OUTPUT";
+      createMutation.mutate(body);
+    }
+  };
+
+  const openEditDialog = (f: FormulaWithDetails) => {
+    setEditingFormula(f);
+    setName(f.name);
+    setFormulaType(f.type);
+    setOutputProductId(String(f.outputProductId));
+    setIsActive(f.active);
+    if (f.type === "CONVERSION" && f.conversion) {
+      setInputProductId(String(f.conversion.inputProductId));
+      setRatioNum(f.conversion.ratioNumerator);
+      setRatioDen(f.conversion.ratioDenominator);
+      setComponents([]);
+    } else if (f.type === "BLEND" && f.components) {
+      setComponents(f.components.map(c => ({
+        componentProductId: String(c.componentProductId),
+        fraction: c.fraction,
+      })));
+      setInputProductId("");
+      setRatioNum("");
+      setRatioDen("");
+    }
+    setIsDialogOpen(true);
   };
 
   const resetForm = () => {
-    setName(""); setFormulaType("CONVERSION"); setOutputProductId(""); setInputProductId(""); setRatioNum(""); setRatioDen(""); setComponents([]);
+    setEditingFormula(null);
+    setName("");
+    setFormulaType("CONVERSION");
+    setOutputProductId("");
+    setInputProductId("");
+    setRatioNum("");
+    setRatioDen("");
+    setIsActive(true);
+    setComponents([]);
   };
 
   const addComponent = () => setComponents([...components, { componentProductId: "", fraction: "" }]);
@@ -102,6 +155,9 @@ export default function Formulas() {
     setComponents(updated);
   };
   const removeComponent = (index: number) => setComponents(components.filter((_, i) => i !== index));
+
+  const activeFormulas = formulas.filter(f => f.active);
+  const inactiveFormulas = formulas.filter(f => !f.active);
 
   return (
     <div className="space-y-6">
@@ -123,11 +179,12 @@ export default function Formulas() {
               <TableHead>Type</TableHead>
               <TableHead>Output Product</TableHead>
               <TableHead>Logic</TableHead>
-              <TableHead>Version</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="w-[60px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {formulas.map((f) => (
+            {activeFormulas.map((f) => (
               <TableRow key={f.id} data-testid={`row-formula-${f.id}`}>
                 <TableCell className="font-medium">{f.name}</TableCell>
                 <TableCell><Badge variant={f.type === "CONVERSION" ? "default" : "secondary"}>{f.type}</Badge></TableCell>
@@ -139,18 +196,48 @@ export default function Formulas() {
                     <span>{f.components.length} Components (Sum: {f.components.reduce((a, b) => a + parseFloat(b.fraction), 0).toFixed(2)})</span>
                   ) : "—"}
                 </TableCell>
-                <TableCell>v{f.version}</TableCell>
+                <TableCell><Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">Active</Badge></TableCell>
+                <TableCell>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditDialog(f)} data-testid={`button-edit-formula-${f.id}`}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
+            {inactiveFormulas.map((f) => (
+              <TableRow key={f.id} className="opacity-50" data-testid={`row-formula-${f.id}`}>
+                <TableCell className="font-medium">{f.name}</TableCell>
+                <TableCell><Badge variant={f.type === "CONVERSION" ? "default" : "secondary"}>{f.type}</Badge></TableCell>
+                <TableCell>{getProductName(f.outputProductId)}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {f.type === "CONVERSION" && f.conversion ? (
+                    <span>1 Out = {(parseFloat(f.conversion.ratioNumerator) / parseFloat(f.conversion.ratioDenominator)).toFixed(2)} {getProductName(f.conversion.inputProductId)}</span>
+                  ) : f.components ? (
+                    <span>{f.components.length} Components</span>
+                  ) : "—"}
+                </TableCell>
+                <TableCell><Badge variant="outline" className="bg-gray-50 text-gray-500 border-gray-200">Inactive</Badge></TableCell>
+                <TableCell>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditDialog(f)} data-testid={`button-edit-formula-${f.id}`}>
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+            {formulas.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No formulas yet.</TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </div>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) resetForm(); setIsDialogOpen(open); }}>
         <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Create New Formula</DialogTitle>
-            <DialogDescription>Define inputs and outputs. This drives yield calculations.</DialogDescription>
+            <DialogTitle>{editingFormula ? "Edit Formula" : "Create New Formula"}</DialogTitle>
+            <DialogDescription>{editingFormula ? "Update the formula details below." : "Define inputs and outputs. This drives yield calculations."}</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-6 py-4">
@@ -159,16 +246,23 @@ export default function Formulas() {
                 <Label>Formula Name</Label>
                 <Input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Standard Yogurt Mix" data-testid="input-formula-name" />
               </div>
-              <div className="space-y-2">
-                <Label>Type</Label>
-                <Select value={formulaType} onValueChange={(val: any) => setFormulaType(val)}>
-                  <SelectTrigger data-testid="select-formula-type"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="CONVERSION">Conversion (1 Input → 1 Output)</SelectItem>
-                    <SelectItem value="BLEND">Blend (Many Inputs → 1 Output)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {editingFormula ? (
+                <div className="space-y-2">
+                  <Label>Type</Label>
+                  <Input value={formulaType} disabled className="bg-muted" />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>Type</Label>
+                  <Select value={formulaType} onValueChange={(val: any) => setFormulaType(val)}>
+                    <SelectTrigger data-testid="select-formula-type"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CONVERSION">Conversion (1 Input - 1 Output)</SelectItem>
+                      <SelectItem value="BLEND">Blend (Many Inputs - 1 Output)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -182,6 +276,16 @@ export default function Formulas() {
                 </SelectContent>
               </Select>
             </div>
+
+            {editingFormula && (
+              <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+                <div>
+                  <Label className="font-medium">Active</Label>
+                  <p className="text-xs text-muted-foreground">Inactive formulas won't appear in production.</p>
+                </div>
+                <Switch checked={isActive} onCheckedChange={setIsActive} data-testid="switch-formula-active" />
+              </div>
+            )}
 
             <div className="border-t pt-4">
               {formulaType === "CONVERSION" ? (
@@ -258,8 +362,10 @@ export default function Formulas() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={createMutation.isPending} data-testid="button-save-formula">Save Formula</Button>
+            <Button variant="outline" onClick={() => { resetForm(); setIsDialogOpen(false); }}>Cancel</Button>
+            <Button onClick={handleSave} disabled={createMutation.isPending || updateMutation.isPending} data-testid="button-save-formula">
+              {editingFormula ? "Update Formula" : "Save Formula"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
