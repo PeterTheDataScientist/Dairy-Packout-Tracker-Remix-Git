@@ -60,12 +60,23 @@ export interface IStorage {
 
   // Production Line Items
   getLineItemsByBatch(batchId: number): Promise<ProductionLineItem[]>;
+  getLineItem(id: number): Promise<ProductionLineItem | undefined>;
   getAllLineItems(dateFrom?: string, dateTo?: string): Promise<(ProductionLineItem & { batchCode: string; batchDate: string })[]>;
   createLineItem(l: InsertProductionLineItem): Promise<ProductionLineItem>;
+  updateLineItem(id: number, updates: Partial<InsertProductionLineItem>): Promise<ProductionLineItem | undefined>;
+  deleteLineItem(id: number): Promise<boolean>;
 
   // Packouts
   getPackouts(dateFrom?: string, dateTo?: string): Promise<Packout[]>;
+  getPackout(id: number): Promise<Packout | undefined>;
   createPackout(p: InsertPackout): Promise<Packout>;
+  updatePackout(id: number, updates: Partial<InsertPackout>): Promise<Packout | undefined>;
+  deletePackout(id: number): Promise<boolean>;
+
+  // Daily Intakes (update/delete)
+  getDailyIntake(id: number): Promise<DailyIntake | undefined>;
+  updateDailyIntake(id: number, updates: Partial<InsertDailyIntake>): Promise<DailyIntake | undefined>;
+  deleteDailyIntake(id: number): Promise<boolean>;
 
   // Events (audit log)
   getEvents(limit?: number): Promise<Event[]>;
@@ -272,9 +283,24 @@ export class DatabaseStorage implements IStorage {
     return baseQuery;
   }
 
+  async getLineItem(id: number) {
+    const [item] = await db.select().from(productionLineItems).where(eq(productionLineItems.id, id));
+    return item;
+  }
+
   async createLineItem(l: InsertProductionLineItem) {
     const [created] = await db.insert(productionLineItems).values(l).returning();
     return created;
+  }
+
+  async updateLineItem(id: number, updates: Partial<InsertProductionLineItem>) {
+    const [updated] = await db.update(productionLineItems).set(updates).where(eq(productionLineItems.id, id)).returning();
+    return updated;
+  }
+
+  async deleteLineItem(id: number) {
+    const result = await db.delete(productionLineItems).where(eq(productionLineItems.id, id));
+    return true;
   }
 
   // Packouts
@@ -287,9 +313,40 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(packouts).orderBy(desc(packouts.date));
   }
 
+  async getPackout(id: number) {
+    const [p] = await db.select().from(packouts).where(eq(packouts.id, id));
+    return p;
+  }
+
   async createPackout(p: InsertPackout) {
     const [created] = await db.insert(packouts).values(p).returning();
     return created;
+  }
+
+  async updatePackout(id: number, updates: Partial<InsertPackout>) {
+    const [updated] = await db.update(packouts).set(updates).where(eq(packouts.id, id)).returning();
+    return updated;
+  }
+
+  async deletePackout(id: number) {
+    await db.delete(packouts).where(eq(packouts.id, id));
+    return true;
+  }
+
+  // Daily Intakes (update/delete)
+  async getDailyIntake(id: number) {
+    const [d] = await db.select().from(dailyIntakes).where(eq(dailyIntakes.id, id));
+    return d;
+  }
+
+  async updateDailyIntake(id: number, updates: Partial<InsertDailyIntake>) {
+    const [updated] = await db.update(dailyIntakes).set(updates).where(eq(dailyIntakes.id, id)).returning();
+    return updated;
+  }
+
+  async deleteDailyIntake(id: number) {
+    await db.delete(dailyIntakes).where(eq(dailyIntakes.id, id));
+    return true;
   }
 
   // Events (audit log)

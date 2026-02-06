@@ -282,6 +282,60 @@ export async function registerRoutes(
     res.status(201).json(l);
   });
 
+  app.put("/api/production/line-items/:id", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const existing = await storage.getLineItem(id);
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (existing.createdByUserId !== req.user!.id && req.user!.role !== "ADMIN") {
+      return res.status(403).json({ error: "You can only edit your own records" });
+    }
+    const { outputQty, inputQty, outputProductId, inputProductId, formulaId, operationType } = req.body;
+    const updates: any = {};
+    if (outputQty !== undefined) updates.outputQty = outputQty;
+    if (inputQty !== undefined) updates.inputQty = inputQty;
+    if (outputProductId !== undefined) updates.outputProductId = outputProductId;
+    if (inputProductId !== undefined) updates.inputProductId = inputProductId;
+    if (formulaId !== undefined) updates.formulaId = formulaId;
+    if (operationType !== undefined) updates.operationType = operationType;
+    const updated = await storage.updateLineItem(id, updates);
+    await storage.createEvent({
+      actorUserId: req.user!.id,
+      entityType: "production_line_item",
+      entityId: id,
+      action: "UPDATE",
+      ipAddress: req.ip || null,
+      fieldName: null,
+      oldValue: JSON.stringify(existing),
+      newValue: JSON.stringify(updated),
+      reason: null,
+      metadataJson: null,
+    });
+    res.json(updated);
+  });
+
+  app.delete("/api/production/line-items/:id", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const existing = await storage.getLineItem(id);
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (existing.createdByUserId !== req.user!.id && req.user!.role !== "ADMIN") {
+      return res.status(403).json({ error: "You can only delete your own records" });
+    }
+    await storage.deleteLineItem(id);
+    await storage.createEvent({
+      actorUserId: req.user!.id,
+      entityType: "production_line_item",
+      entityId: id,
+      action: "DELETE",
+      ipAddress: req.ip || null,
+      fieldName: null,
+      oldValue: JSON.stringify(existing),
+      newValue: null,
+      reason: null,
+      metadataJson: null,
+    });
+    res.json({ success: true });
+  });
+
   // --- PACKOUTS ---
   app.get("/api/packouts", requireAuth, async (req, res) => {
     const { dateFrom, dateTo } = req.query;
@@ -307,6 +361,111 @@ export async function registerRoutes(
       metadataJson: null,
     });
     res.status(201).json(p);
+  });
+
+  app.put("/api/packouts/:id", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const existing = await storage.getPackout(id);
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (existing.createdByUserId !== req.user!.id && req.user!.role !== "ADMIN") {
+      return res.status(403).json({ error: "You can only edit your own records" });
+    }
+    const { qty, productId, date, packSizeLabel } = req.body;
+    const updates: any = {};
+    if (qty !== undefined) updates.qty = qty;
+    if (productId !== undefined) updates.productId = productId;
+    if (date !== undefined) updates.date = date;
+    if (packSizeLabel !== undefined) updates.packSizeLabel = packSizeLabel;
+    const updated = await storage.updatePackout(id, updates);
+    await storage.createEvent({
+      actorUserId: req.user!.id,
+      entityType: "packout",
+      entityId: id,
+      action: "UPDATE",
+      ipAddress: req.ip || null,
+      fieldName: null,
+      oldValue: JSON.stringify(existing),
+      newValue: JSON.stringify(updated),
+      reason: null,
+      metadataJson: null,
+    });
+    res.json(updated);
+  });
+
+  app.delete("/api/packouts/:id", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const existing = await storage.getPackout(id);
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (existing.createdByUserId !== req.user!.id && req.user!.role !== "ADMIN") {
+      return res.status(403).json({ error: "You can only delete your own records" });
+    }
+    await storage.deletePackout(id);
+    await storage.createEvent({
+      actorUserId: req.user!.id,
+      entityType: "packout",
+      entityId: id,
+      action: "DELETE",
+      ipAddress: req.ip || null,
+      fieldName: null,
+      oldValue: JSON.stringify(existing),
+      newValue: null,
+      reason: null,
+      metadataJson: null,
+    });
+    res.json({ success: true });
+  });
+
+  // --- DAILY INTAKES (edit/delete) ---
+  app.put("/api/intakes/:id", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const existing = await storage.getDailyIntake(id);
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (existing.createdByUserId !== req.user!.id && req.user!.role !== "ADMIN") {
+      return res.status(403).json({ error: "You can only edit your own records" });
+    }
+    const { qty, productId, supplierId, date } = req.body;
+    const updates: any = {};
+    if (qty !== undefined) updates.qty = qty;
+    if (productId !== undefined) updates.productId = productId;
+    if (supplierId !== undefined) updates.supplierId = supplierId;
+    if (date !== undefined) updates.date = date;
+    const updated = await storage.updateDailyIntake(id, updates);
+    await storage.createEvent({
+      actorUserId: req.user!.id,
+      entityType: "daily_intake",
+      entityId: id,
+      action: "UPDATE",
+      ipAddress: req.ip || null,
+      fieldName: null,
+      oldValue: JSON.stringify(existing),
+      newValue: JSON.stringify(updated),
+      reason: null,
+      metadataJson: null,
+    });
+    res.json(updated);
+  });
+
+  app.delete("/api/intakes/:id", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const existing = await storage.getDailyIntake(id);
+    if (!existing) return res.status(404).json({ error: "Not found" });
+    if (existing.createdByUserId !== req.user!.id && req.user!.role !== "ADMIN") {
+      return res.status(403).json({ error: "You can only delete your own records" });
+    }
+    await storage.deleteDailyIntake(id);
+    await storage.createEvent({
+      actorUserId: req.user!.id,
+      entityType: "daily_intake",
+      entityId: id,
+      action: "DELETE",
+      ipAddress: req.ip || null,
+      fieldName: null,
+      oldValue: JSON.stringify(existing),
+      newValue: null,
+      reason: null,
+      metadataJson: null,
+    });
+    res.json({ success: true });
   });
 
   // --- CHANGE REQUESTS ---

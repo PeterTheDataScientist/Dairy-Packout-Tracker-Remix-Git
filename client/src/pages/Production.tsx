@@ -1,15 +1,17 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, ArrowRight, AlertTriangle, CheckCircle2, Beaker, Info } from "lucide-react";
+import { Plus, ArrowRight, AlertTriangle, CheckCircle2, Beaker, Info, Pencil, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
@@ -19,11 +21,14 @@ type FormulaWithDetails = {
   conversion?: { inputProductId: number; ratioNumerator: string; ratioDenominator: string };
   components?: { componentProductId: number; fraction: string }[];
 };
-type LineItem = { id: number; batchCode: string; batchDate: string; operationType: string; outputProductId: number; outputQty: string; inputProductId: number | null; inputQty: string | null };
+type LineItem = { id: number; batchCode: string; batchDate: string; operationType: string; outputProductId: number; outputQty: string; inputProductId: number | null; inputQty: string | null; createdByUserId?: number };
 
 export default function Production() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<LineItem | null>(null);
+  const [deletingItem, setDeletingItem] = useState<LineItem | null>(null);
   const [selectedProductId, setSelectedProductId] = useState("");
   const [outputQty, setOutputQty] = useState("");
   const [actualInputQty, setActualInputQty] = useState("");
@@ -88,6 +93,10 @@ export default function Production() {
     return null;
   }, [matchedFormula, outputQty, actualInputQty]);
 
+  const canEditItem = (item: LineItem) => {
+    return user?.role === "ADMIN" || item.createdByUserId === user?.id;
+  };
+
   const createBatchMutation = useMutation({
     mutationFn: async (data: any) => {
       const res = await apiRequest("POST", "/api/production/batches", data);
@@ -106,31 +115,65 @@ export default function Production() {
     },
   });
 
+  const updateLineItemMutation = useMutation({
+    mutationFn: async ({ id, ...data }: any) => {
+      const res = await apiRequest("PUT", `/api/production/line-items/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/production/line-items"] });
+    },
+  });
+
+  const deleteLineItemMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/production/line-items/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/production/line-items"] });
+    },
+  });
+
   const handleSave = async () => {
     if (!selectedProduct || !outputQty) return;
     const operationType = matchedFormula?.type === "BLEND" ? "BLEND" : "CONVERT";
     try {
-      const batch = await createBatchMutation.mutateAsync({
-        date: batchDate,
-        batchCode,
-        notes: null,
-      });
-
-      await createLineItemMutation.mutateAsync({
-        batchId: batch.id,
-        operationType,
-        formulaId: matchedFormula?.id || null,
-        inputProductId: matchedFormula?.type === "CONVERSION" ? matchedFormula.conversion?.inputProductId : null,
-        inputQty: actualInputQty || null,
-        outputProductId: selectedProduct.id,
-        outputQty,
-        unitType: selectedProduct.unitType,
-      });
-
-      toast({
-        title: "Batch Recorded",
-        description: `${selectedProduct.name} — ${parseFloat(outputQty).toLocaleString()} ${unitShort(selectedProduct.unitType)} logged.`,
-      });
+      if (editingItem) {
+        await updateLineItemMutation.mutateAsync({
+          id: editingItem.id,
+          outputQty,
+          inputQty: actualInputQty || null,
+          outputProductId: selectedProduct.id,
+          inputProductId: matchedFormula?.type === "CONVERSION" ? matchedFormula.conversion?.inputProductId : null,
+          formulaId: matchedFormula?.id || null,
+          operationType,
+        });
+        toast({
+          title: "Record Updated",
+          description: `${selectedProduct.name} — updated to ${parseFloat(outputQty).toLocaleString()} ${unitShort(selectedProduct.unitType)}.`,
+        });
+      } else {
+        const batch = await createBatchMutation.mutateAsync({
+          date: batchDate,
+          batchCode,
+          notes: null,
+        });
+        await createLineItemMutation.mutateAsync({
+          batchId: batch.id,
+          operationType,
+          formulaId: matchedFormula?.id || null,
+          inputProductId: matchedFormula?.type === "CONVERSION" ? matchedFormula.conversion?.inputProductId : null,
+          inputQty: actualInputQty || null,
+          outputProductId: selectedProduct.id,
+          outputQty,
+          unitType: selectedProduct.unitType,
+        });
+        toast({
+          title: "Batch Recorded",
+          description: `${selectedProduct.name} — ${parseFloat(outputQty).toLocaleString()} ${unitShort(selectedProduct.unitType)} logged.`,
+        });
+      }
       setIsDialogOpen(false);
       resetForm();
     } catch (err: any) {
@@ -138,7 +181,29 @@ export default function Production() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!deletingItem) return;
+    try {
+      await deleteLineItemMutation.mutateAsync(deletingItem.id);
+      toast({ title: "Record Deleted", description: "Production record has been removed." });
+      setDeletingItem(null);
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Error", description: err.message });
+    }
+  };
+
+  const openEditDialog = (item: LineItem) => {
+    setEditingItem(item);
+    setSelectedProductId(String(item.outputProductId));
+    setOutputQty(item.outputQty);
+    setActualInputQty(item.inputQty || "");
+    setBatchDate(item.batchDate);
+    setBatchCode(item.batchCode);
+    setIsDialogOpen(true);
+  };
+
   const resetForm = () => {
+    setEditingItem(null);
     setBatchCode(`B-${format(new Date(), "yyyyMMdd")}-${Math.floor(Math.random() * 1000)}`);
     setBatchDate(format(new Date(), "yyyy-MM-dd"));
     setSelectedProductId("");
@@ -167,6 +232,7 @@ export default function Production() {
               <TableHead>Product Made</TableHead>
               <TableHead className="text-right">Qty Produced</TableHead>
               <TableHead className="text-right">Raw Material Used</TableHead>
+              <TableHead className="w-[80px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -186,40 +252,54 @@ export default function Production() {
                     </>
                   ) : "—"}
                 </TableCell>
+                <TableCell>
+                  {canEditItem(log) && (
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditDialog(log)} data-testid={`button-edit-production-${log.id}`}>
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeletingItem(log)} data-testid={`button-delete-production-${log.id}`}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
             {lineItems.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No production records yet.</TableCell>
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No production records yet.</TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) resetForm(); setIsDialogOpen(open); }}>
         <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Beaker className="h-5 w-5" />
-              Record Production
+              {editingItem ? "Edit Production Record" : "Record Production"}
             </DialogTitle>
             <DialogDescription>
-              Pick what you made, enter how much, and we'll calculate the rest.
+              {editingItem ? "Update the quantities for this production record." : "Pick what you made, enter how much, and we'll calculate the rest."}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-5">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Date</Label>
-                <Input type="date" value={batchDate} onChange={e => setBatchDate(e.target.value)} data-testid="input-batch-date" />
+            {!editingItem && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Date</Label>
+                  <Input type="date" value={batchDate} onChange={e => setBatchDate(e.target.value)} data-testid="input-batch-date" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Batch Code</Label>
+                  <Input value={batchCode} onChange={e => setBatchCode(e.target.value)} className="font-mono text-sm" data-testid="input-batch-code" />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Batch Code</Label>
-                <Input value={batchCode} onChange={e => setBatchCode(e.target.value)} className="font-mono text-sm" data-testid="input-batch-code" />
-              </div>
-            </div>
+            )}
 
             <div className="space-y-2">
               <Label className="font-medium">What did you make?</Label>
@@ -339,13 +419,30 @@ export default function Production() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={!selectedProduct || !outputQty || createBatchMutation.isPending} data-testid="button-save-batch">
-              Save Batch
+            <Button variant="outline" onClick={() => { resetForm(); setIsDialogOpen(false); }}>Cancel</Button>
+            <Button onClick={handleSave} disabled={!selectedProduct || !outputQty || createBatchMutation.isPending || updateLineItemMutation.isPending} data-testid="button-save-batch">
+              {editingItem ? "Update" : "Save Batch"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deletingItem} onOpenChange={(open) => { if (!open) setDeletingItem(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Production Record?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the record for {deletingItem ? getProductName(deletingItem.outputProductId) : ""} ({deletingItem ? `${parseFloat(deletingItem.outputQty).toLocaleString()} ${unitShort(getProductUnit(deletingItem.outputProductId))}` : ""}). This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="button-confirm-delete">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
