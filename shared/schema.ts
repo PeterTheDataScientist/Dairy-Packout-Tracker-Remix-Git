@@ -18,7 +18,7 @@ import { z } from "zod";
 export const roleEnum = pgEnum("role", ["ADMIN", "DATA_ENTRY"]);
 export const unitTypeEnum = pgEnum("unit_type", ["LITER", "KG", "UNIT"]);
 export const productCategoryEnum = pgEnum("product_category", [
-  "RAW_MILK", "YOGURT", "DTY", "YOLAC", "PROBIOTIC", "CREAM_CHEESE", "FETA", "OTHER",
+  "RAW_MILK", "MILK", "YOGURT", "DTY", "YOLAC", "PROBIOTIC", "CREAM_CHEESE", "FETA", "SMOOTHY", "FRESH_CREAM", "DIP", "HODZEKO", "CHEESE", "OTHER",
 ]);
 export const formulaTypeEnum = pgEnum("formula_type", ["CONVERSION", "BLEND"]);
 export const inputBasisEnum = pgEnum("input_basis", ["PER_UNIT_OUTPUT", "PER_UNIT_INPUT"]);
