@@ -3,7 +3,9 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider, useAuth } from "@/lib/auth";
 import NotFound from "@/pages/not-found";
+import Login from "@/pages/Login";
 import { MainLayout } from "@/components/layout/MainLayout";
 import Dashboard from "@/pages/Dashboard";
 import Production from "@/pages/Production";
@@ -13,18 +15,24 @@ import Approvals from "@/pages/Approvals";
 import Packouts from "@/pages/Packouts";
 import Reports from "@/pages/Reports";
 import MyHistory from "@/pages/MyHistory";
+import Intake from "@/pages/Intake";
+import { Loader2 } from "lucide-react";
 
-// Simple Intake Placeholder
-function Intake() { 
-  return (
-    <div className="p-8 text-center border rounded-lg border-dashed">
-      <h2 className="text-xl font-bold mb-2">Intake Module</h2>
-      <p className="text-muted-foreground">Receiving logic similar to Production would go here.</p>
-    </div>
-  ) 
-}
+function AppRoutes() {
+  const { user, isLoading } = useAuth();
 
-function Router() {
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login />;
+  }
+
   return (
     <MainLayout>
       <Switch>
@@ -48,7 +56,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Router />
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

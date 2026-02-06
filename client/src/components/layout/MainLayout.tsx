@@ -1,46 +1,48 @@
-import { 
-  Sidebar, 
-  SidebarContent, 
-  SidebarFooter, 
-  SidebarHeader, 
-  SidebarMenu, 
-  SidebarMenuButton, 
-  SidebarMenuItem, 
-  SidebarProvider, 
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
   SidebarRail,
   SidebarTrigger
 } from "@/components/ui/sidebar";
-import { 
-  LayoutDashboard, 
-  Milk, 
-  Factory, 
-  Package, 
-  FileBarChart, 
-  Settings, 
-  ShieldCheck, 
-  Menu,
+import {
+  LayoutDashboard,
+  Milk,
+  Factory,
+  Package,
+  FileBarChart,
+  Settings,
+  ShieldCheck,
   Beaker,
-  History
+  History,
+  LogOut
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
-import { useStore } from "@/lib/mockStore";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAuth } from "@/lib/auth";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 
 export function AppSidebar() {
   const [location] = useLocation();
-  const { currentUser } = useStore();
+  const { user, logout } = useAuth();
+
+  if (!user) return null;
 
   const isActive = (path: string) => location === path;
-  const isDataEntry = currentUser.role === 'DATA_ENTRY';
+  const isDataEntry = user.role === "DATA_ENTRY";
 
   const menuItems = [
     { title: "Dashboard", icon: LayoutDashboard, path: "/" },
     { title: "Intake", icon: Milk, path: "/intake" },
     { title: "Production", icon: Factory, path: "/production" },
     { title: "Packouts", icon: Package, path: "/packouts" },
-    // Show My History for Data Entry, Reports for Admin
-    ...(isDataEntry 
+    ...(isDataEntry
       ? [{ title: "My History", icon: History, path: "/my-history" }]
       : [{ title: "Reports", icon: FileBarChart, path: "/reports" }]
     ),
@@ -57,7 +59,7 @@ export function AppSidebar() {
       <SidebarHeader className="h-16 flex items-center px-4 border-b border-sidebar-border/50">
         <div className="flex items-center gap-3 w-full">
           <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center">
-            <img src="/yomilk-logo.png" alt="YoMilk" className="h-6 w-6 object-contain" />
+            <Milk className="h-5 w-5 text-primary" />
           </div>
           <div className="flex flex-col">
             <span className="font-bold text-lg leading-none tracking-tight">YoMilk</span>
@@ -74,10 +76,11 @@ export function AppSidebar() {
           {menuItems.map((item) => (
             <SidebarMenuItem key={item.path}>
               <Link href={item.path}>
-                <SidebarMenuButton 
+                <SidebarMenuButton
                   isActive={isActive(item.path)}
                   tooltip={item.title}
                   className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground hover:bg-sidebar-accent/50 transition-all duration-200"
+                  data-testid={`link-nav-${item.title.toLowerCase().replace(/\s/g, '-')}`}
                 >
                   <item.icon className="h-4 w-4" />
                   <span>{item.title}</span>
@@ -95,10 +98,11 @@ export function AppSidebar() {
             {adminItems.map((item) => (
               <SidebarMenuItem key={item.path}>
                 <Link href={item.path}>
-                  <SidebarMenuButton 
+                  <SidebarMenuButton
                     isActive={isActive(item.path)}
                     tooltip={item.title}
                     className="data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground hover:bg-sidebar-accent/50 transition-all duration-200"
+                    data-testid={`link-nav-${item.title.toLowerCase().replace(/\s/g, '-')}`}
                   >
                     <item.icon className="h-4 w-4" />
                     <span>{item.title}</span>
@@ -113,13 +117,15 @@ export function AppSidebar() {
       <SidebarFooter className="p-4 border-t border-sidebar-border/50">
         <div className="flex items-center gap-3 p-2 rounded-lg bg-sidebar-accent/50 border border-sidebar-border">
           <Avatar className="h-8 w-8 border border-border">
-            <AvatarImage src={currentUser.avatarUrl} />
-            <AvatarFallback>{currentUser.name.substring(0, 2)}</AvatarFallback>
+            <AvatarFallback>{user.name.substring(0, 2)}</AvatarFallback>
           </Avatar>
-          <div className="flex flex-col overflow-hidden">
-            <span className="text-sm font-medium truncate">{currentUser.name}</span>
-            <span className="text-xs text-muted-foreground truncate">{currentUser.role}</span>
+          <div className="flex flex-col overflow-hidden flex-1">
+            <span className="text-sm font-medium truncate">{user.name}</span>
+            <span className="text-xs text-muted-foreground truncate">{user.role}</span>
           </div>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={logout} data-testid="button-logout">
+            <LogOut className="h-4 w-4" />
+          </Button>
         </div>
       </SidebarFooter>
       <SidebarRail />
