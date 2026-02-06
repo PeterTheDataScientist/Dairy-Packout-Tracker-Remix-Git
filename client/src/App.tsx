@@ -16,6 +16,7 @@ import Packouts from "@/pages/Packouts";
 import Reports from "@/pages/Reports";
 import MyHistory from "@/pages/MyHistory";
 import Intake from "@/pages/Intake";
+import Suppliers from "@/pages/Suppliers";
 import { Loader2 } from "lucide-react";
 
 function AppRoutes() {
@@ -44,6 +45,7 @@ function AppRoutes() {
         <Route path="/products" component={Products} />
         <Route path="/formulas" component={Formulas} />
         <Route path="/approvals" component={Approvals} />
+        <Route path="/suppliers" component={Suppliers} />
         <Route path="/my-history" component={MyHistory} />
         <Route component={NotFound} />
       </Switch>

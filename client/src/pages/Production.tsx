@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Plus, ArrowRight, AlertTriangle, CheckCircle2 } from "lucide-react";
@@ -191,16 +191,14 @@ export default function Production() {
                 </div>
                 <div className="space-y-2">
                   <Label>Select Formula</Label>
-                  <Select value={selectedFormulaId} onValueChange={setSelectedFormulaId}>
-                    <SelectTrigger data-testid="select-formula">
-                      <SelectValue placeholder="Choose formula..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredFormulas.map(f => (
-                        <SelectItem key={f.id} value={String(f.id)}>{f.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <SearchableSelect
+                    options={filteredFormulas.map(f => ({ value: String(f.id), label: f.name }))}
+                    value={selectedFormulaId}
+                    onValueChange={setSelectedFormulaId}
+                    placeholder="Choose formula..."
+                    searchPlaceholder="Search formulas..."
+                    data-testid="select-formula"
+                  />
                 </div>
               </div>
 

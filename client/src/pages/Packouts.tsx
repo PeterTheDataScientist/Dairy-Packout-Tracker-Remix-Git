@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Plus, Package } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -127,14 +127,14 @@ export default function Packouts() {
             </div>
             <div className="space-y-2">
               <Label>Product</Label>
-              <Select value={formData.productId} onValueChange={val => setFormData({ ...formData, productId: val })}>
-                <SelectTrigger data-testid="select-packout-product"><SelectValue placeholder="Select finished good" /></SelectTrigger>
-                <SelectContent>
-                  {finishedGoods.map(p => (
-                    <SelectItem key={p.id} value={String(p.id)}>{p.name} ({p.unitType})</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={finishedGoods.map(p => ({ value: String(p.id), label: `${p.name} (${p.unitType})` }))}
+                value={formData.productId}
+                onValueChange={val => setFormData({ ...formData, productId: val })}
+                placeholder="Select finished good"
+                searchPlaceholder="Search products..."
+                data-testid="select-packout-product"
+              />
             </div>
             <div className="space-y-2">
               <Label>Quantity</Label>

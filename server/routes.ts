@@ -60,6 +60,26 @@ export async function registerRoutes(
     res.status(201).json(s);
   });
 
+  app.patch("/api/suppliers/:id", requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const old = await storage.getSupplier(id);
+    const s = await storage.updateSupplier(id, req.body);
+    if (!s) return res.status(404).json({ message: "Not found" });
+    await storage.createEvent({
+      actorUserId: req.user!.id,
+      entityType: "supplier",
+      entityId: id,
+      action: "UPDATE",
+      ipAddress: req.ip || null,
+      fieldName: null,
+      oldValue: JSON.stringify(old),
+      newValue: JSON.stringify(s),
+      reason: null,
+      metadataJson: null,
+    });
+    res.json(s);
+  });
+
   // --- PRODUCTS ---
   app.get("/api/products", requireAuth, async (_req, res) => {
     const list = await storage.getProducts();

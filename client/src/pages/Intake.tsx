@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Plus, Milk } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -115,25 +115,25 @@ export default function IntakePage() {
             </div>
             <div className="space-y-2">
               <Label>Supplier</Label>
-              <Select value={formData.supplierId} onValueChange={val => setFormData({ ...formData, supplierId: val })}>
-                <SelectTrigger data-testid="select-intake-supplier"><SelectValue placeholder="Select supplier" /></SelectTrigger>
-                <SelectContent>
-                  {suppliers.filter(s => s.active).map(s => (
-                    <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={suppliers.filter(s => s.active).map(s => ({ value: String(s.id), label: s.name }))}
+                value={formData.supplierId}
+                onValueChange={val => setFormData({ ...formData, supplierId: val })}
+                placeholder="Select supplier"
+                searchPlaceholder="Search suppliers..."
+                data-testid="select-intake-supplier"
+              />
             </div>
             <div className="space-y-2">
               <Label>Product</Label>
-              <Select value={formData.productId} onValueChange={val => setFormData({ ...formData, productId: val })}>
-                <SelectTrigger data-testid="select-intake-product"><SelectValue placeholder="Select product" /></SelectTrigger>
-                <SelectContent>
-                  {products.map(p => (
-                    <SelectItem key={p.id} value={String(p.id)}>{p.name} ({p.unitType})</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableSelect
+                options={products.map(p => ({ value: String(p.id), label: `${p.name} (${p.unitType})` }))}
+                value={formData.productId}
+                onValueChange={val => setFormData({ ...formData, productId: val })}
+                placeholder="Select product"
+                searchPlaceholder="Search products..."
+                data-testid="select-intake-product"
+              />
             </div>
             <div className="space-y-2">
               <Label>Quantity</Label>

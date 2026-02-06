@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Beaker,
   History,
+  Truck,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -40,6 +41,7 @@ const routeTitles: Record<string, string> = {
   "/products": "Products",
   "/formulas": "Formulas",
   "/approvals": "Approvals",
+  "/suppliers": "Suppliers",
   "/my-history": "My History",
 };
 
@@ -66,6 +68,7 @@ export function AppSidebar() {
   const adminItems = [
     { title: "Products", icon: Beaker, path: "/products" },
     { title: "Formulas", icon: Settings, path: "/formulas" },
+    { title: "Suppliers", icon: Truck, path: "/suppliers" },
     { title: "Approvals", icon: ShieldCheck, path: "/approvals" },
   ];
 
