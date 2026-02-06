@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -9,19 +9,72 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Beaker, Link2, Link2Off } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type Product = { id: number; name: string; category: string; unitType: string; isIntermediate: boolean; active: boolean };
+type FormulaWithDetails = {
+  id: number; name: string; type: "CONVERSION" | "BLEND"; outputProductId: number; active: boolean; version: number;
+  conversion?: { inputProductId: number; ratioNumerator: string; ratioDenominator: string };
+  components?: { componentProductId: number; fraction: string }[];
+};
+
+const CATEGORIES = [
+  { value: "RAW_MILK", label: "Raw Milk" },
+  { value: "MILK", label: "Milk" },
+  { value: "YOGURT", label: "Yogurt" },
+  { value: "DTY", label: "DTY" },
+  { value: "YOLAC", label: "Yolac" },
+  { value: "PROBIOTIC", label: "Probiotic" },
+  { value: "CREAM_CHEESE", label: "Cream Cheese" },
+  { value: "FETA", label: "Feta" },
+  { value: "SMOOTHY", label: "Smoothy" },
+  { value: "FRESH_CREAM", label: "Fresh Cream" },
+  { value: "DIP", label: "Dip" },
+  { value: "HODZEKO", label: "Hodzeko" },
+  { value: "CHEESE", label: "Cheese" },
+  { value: "OTHER", label: "Other" },
+];
+
+const categoryLabel = (val: string) => CATEGORIES.find(c => c.value === val)?.label || val;
+
+const categoryColors: Record<string, string> = {
+  RAW_MILK: "bg-amber-100 text-amber-800 border-amber-200",
+  MILK: "bg-blue-100 text-blue-800 border-blue-200",
+  YOGURT: "bg-pink-100 text-pink-800 border-pink-200",
+  DTY: "bg-purple-100 text-purple-800 border-purple-200",
+  YOLAC: "bg-lime-100 text-lime-800 border-lime-200",
+  PROBIOTIC: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  CREAM_CHEESE: "bg-yellow-100 text-yellow-800 border-yellow-200",
+  FETA: "bg-orange-100 text-orange-800 border-orange-200",
+  SMOOTHY: "bg-violet-100 text-violet-800 border-violet-200",
+  FRESH_CREAM: "bg-sky-100 text-sky-800 border-sky-200",
+  DIP: "bg-rose-100 text-rose-800 border-rose-200",
+  HODZEKO: "bg-teal-100 text-teal-800 border-teal-200",
+  CHEESE: "bg-orange-100 text-orange-800 border-orange-200",
+  OTHER: "bg-gray-100 text-gray-800 border-gray-200",
+};
 
 export default function Products() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState({ name: "", category: "OTHER", unitType: "UNIT", isIntermediate: false, active: true });
 
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
+  const { data: formulas = [] } = useQuery<FormulaWithDetails[]>({ queryKey: ["/api/formulas"] });
+
+  const formulasByProduct = useMemo(() => {
+    const map: Record<number, FormulaWithDetails[]> = {};
+    for (const f of formulas) {
+      if (!map[f.outputProductId]) map[f.outputProductId] = [];
+      map[f.outputProductId].push(f);
+    }
+    return map;
+  }, [formulas]);
 
   const createMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -32,6 +85,9 @@ export default function Products() {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       toast({ title: "Product created" });
       setIsDialogOpen(false);
+    },
+    onError: (err: any) => {
+      toast({ variant: "destructive", title: "Error", description: err.message });
     },
   });
 
@@ -45,12 +101,23 @@ export default function Products() {
       toast({ title: "Product updated" });
       setIsDialogOpen(false);
     },
+    onError: (err: any) => {
+      toast({ variant: "destructive", title: "Error", description: err.message });
+    },
   });
 
-  const filteredProducts = products.filter(p =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    p.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const usedCategories = useMemo(() => {
+    const cats = new Set(products.map(p => p.category));
+    return CATEGORIES.filter(c => cats.has(c.value));
+  }, [products]);
+
+  const filteredProducts = products.filter(p => {
+    const matchSearch = searchTerm === "" ||
+      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.category.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchCategory = categoryFilter === "ALL" || p.category === categoryFilter;
+    return matchSearch && matchCategory;
+  });
 
   const handleSave = () => {
     if (!formData.name) return;
@@ -72,23 +139,36 @@ export default function Products() {
     setFormData({ name: "", category: "OTHER", unitType: "UNIT", isIntermediate: false, active: true });
   };
 
+  const getProductName = (id: number) => products.find(p => p.id === id)?.name || `#${id}`;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Products</h2>
-          <p className="text-muted-foreground">Manage raw materials, intermediates, and finished goods.</p>
+          <p className="text-muted-foreground">Manage your product catalog. {products.length} products across {usedCategories.length} categories.</p>
         </div>
         <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="gap-2" data-testid="button-add-product">
           <Plus className="h-4 w-4" /> Add Product
         </Button>
       </div>
 
-      <div className="flex items-center gap-4 bg-card p-4 rounded-lg border shadow-sm">
-        <div className="relative flex-1">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-card p-4 rounded-lg border shadow-sm">
+        <div className="relative flex-1 w-full">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Search products..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} data-testid="input-search-products" />
         </div>
+        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <SelectTrigger className="w-[180px]" data-testid="select-category-filter">
+            <SelectValue placeholder="All Categories" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Categories</SelectItem>
+            {usedCategories.map(c => (
+              <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="rounded-md border bg-card shadow-sm overflow-hidden">
@@ -98,32 +178,81 @@ export default function Products() {
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Unit</TableHead>
-              <TableHead>Type</TableHead>
+              <TableHead>Formula</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredProducts.map((product) => (
-              <TableRow key={product.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => handleEdit(product)} data-testid={`row-product-${product.id}`}>
-                <TableCell className="font-medium">{product.name}</TableCell>
-                <TableCell><Badge variant="secondary" className="font-normal">{product.category}</Badge></TableCell>
-                <TableCell className="text-muted-foreground text-sm uppercase">{product.unitType}</TableCell>
-                <TableCell>
-                  {product.isIntermediate ? (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">Intermediate</span>
-                  ) : (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300">Finished Good</span>
-                  )}
-                </TableCell>
-                <TableCell><div className={`h-2.5 w-2.5 rounded-full ${product.active ? "bg-emerald-500" : "bg-gray-300"}`} /></TableCell>
-                <TableCell className="text-right">
-                  <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleEdit(product); }}>Edit</Button>
+            {filteredProducts.map((product) => {
+              const linkedFormulas = formulasByProduct[product.id] || [];
+              const hasFormula = linkedFormulas.length > 0;
+              return (
+                <TableRow key={product.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => handleEdit(product)} data-testid={`row-product-${product.id}`}>
+                  <TableCell>
+                    <div className="font-medium">{product.name}</div>
+                    {product.isIntermediate && (
+                      <span className="text-xs text-blue-600">Intermediate</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`font-normal border ${categoryColors[product.category] || categoryColors.OTHER}`}>
+                      {categoryLabel(product.category)}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm uppercase">{product.unitType}</TableCell>
+                  <TableCell>
+                    {hasFormula ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <div className="flex items-center gap-1.5">
+                            <Link2 className="h-4 w-4 text-emerald-600" />
+                            <span className="text-xs font-medium text-emerald-700">
+                              {linkedFormulas.map(f => f.name).join(", ")}
+                            </span>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          {linkedFormulas.map(f => (
+                            <div key={f.id} className="text-xs">
+                              <span className="font-semibold">{f.name}</span> ({f.type})
+                              {f.type === "CONVERSION" && f.conversion && (
+                                <span> — {getProductName(f.conversion.inputProductId)} @ {parseFloat(f.conversion.ratioDenominator) ? (parseFloat(f.conversion.ratioNumerator) / parseFloat(f.conversion.ratioDenominator)).toFixed(2) : "N/A"}:1</span>
+                              )}
+                              {f.type === "BLEND" && f.components && (
+                                <span> — {f.components.length} components</span>
+                              )}
+                            </div>
+                          ))}
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      <div className="flex items-center gap-1.5 text-muted-foreground/50">
+                        <Link2Off className="h-4 w-4" />
+                        <span className="text-xs">No formula</span>
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell><div className={`h-2.5 w-2.5 rounded-full ${product.active ? "bg-emerald-500" : "bg-gray-300"}`} /></TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleEdit(product); }}>Edit</Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+            {filteredProducts.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  {searchTerm || categoryFilter !== "ALL" ? "No products match your filters." : "No products yet."}
                 </TableCell>
               </TableRow>
-            ))}
+            )}
           </TableBody>
         </Table>
+      </div>
+
+      <div className="text-xs text-muted-foreground text-right">
+        Showing {filteredProducts.length} of {products.length} products
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -142,14 +271,9 @@ export default function Products() {
               <Select value={formData.category} onValueChange={(val) => setFormData({ ...formData, category: val })}>
                 <SelectTrigger className="col-span-3" data-testid="select-product-category"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="RAW_MILK">Raw Milk</SelectItem>
-                  <SelectItem value="YOGURT">Yogurt</SelectItem>
-                  <SelectItem value="DTY">DTY</SelectItem>
-                  <SelectItem value="YOLAC">Yolac</SelectItem>
-                  <SelectItem value="PROBIOTIC">Probiotic</SelectItem>
-                  <SelectItem value="CREAM_CHEESE">Cream Cheese</SelectItem>
-                  <SelectItem value="FETA">Feta</SelectItem>
-                  <SelectItem value="OTHER">Other</SelectItem>
+                  {CATEGORIES.map(c => (
+                    <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -175,6 +299,25 @@ export default function Products() {
               <Label className="text-right">Active</Label>
               <Switch checked={formData.active} onCheckedChange={(c) => setFormData({ ...formData, active: c })} className="col-span-3" data-testid="switch-active" />
             </div>
+
+            {editingId && (
+              <div className="border-t pt-4 mt-2">
+                <Label className="text-sm font-medium">Linked Formulas</Label>
+                <div className="mt-2 space-y-2">
+                  {(formulasByProduct[editingId] || []).length > 0 ? (
+                    (formulasByProduct[editingId] || []).map(f => (
+                      <div key={f.id} className="flex items-center gap-2 p-2 bg-muted/50 rounded text-sm">
+                        <Beaker className="h-4 w-4 text-primary" />
+                        <span className="font-medium">{f.name}</span>
+                        <Badge variant="outline" className="ml-auto text-xs">{f.type}</Badge>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No formulas linked. Create one on the Formulas page with this product as output.</p>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
