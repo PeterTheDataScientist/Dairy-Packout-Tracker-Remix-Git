@@ -1,0 +1,214 @@
+Build a production + packout tracking web app for a dairy business (YoMilk). Replace a messy spreadsheet with a beautiful, intuitive UI + auditable database + dynamic yield logic.
+
+NON-NEGOTIABLE: Products and their formulas MUST be fully configurable in the app (admin UI), and the configured logic MUST automatically apply to:
+1) data-entry validation / guidance
+2) yield calculations (expected vs actual)
+3) reporting & dashboards
+No hardcoded products or hardcoded formulas.
+
+STACK (use these unless impossible)
+- Backend: Node.js + TypeScript + Express
+- DB: PostgreSQL
+- ORM: Prisma (migrations required)
+- Frontend: React + TypeScript (Vite) + Tailwind
+- Auth: secure login + RBAC (JWT or sessions)
+- Roles: DATA_ENTRY and ADMIN only
+- Runs in Replit, single command to run, include README
+
+CORE WORKFLOWS
+A) Admin sets up:
+- Suppliers
+- Products (category + unit type)
+- Conversion formulas (inputs → outputs) and blend recipes (components)
+B) Data Entry captures daily activity:
+- Intake (milk received by supplier)
+- Production batches (transformations, e.g., milk→yogurt; yogurt→DTY)
+- Packouts (finished goods packaged out)
+C) App calculates:
+- Expected yield based on configured formulas
+- Actual yield from captured production + packouts
+- Variances and exceptions
+D) Audit + Approval:
+- Any edit after initial save creates a Change Request requiring ADMIN approval
+- Immutable event ledger records EVERYTHING
+
+DATA MODEL (must implement)
+Users / RBAC
+- User(id, name, email, passwordHash, role)
+
+Master data
+- Supplier(id, name, active)
+- Product(
+    id, name, category, unitType,
+    isIntermediate boolean,  // e.g. yogurt as intermediate
+    active boolean
+  )
+  category examples: RAW_MILK, YOGURT, DTY, YOLAC, PROBIOTIC, CREAM_CHEESE, FETA, OTHER
+  unitType examples: LITER, KILOGRAM, UNIT
+
+FORMULA ENGINE (CRITICAL: dynamic + configurable)
+Implement two formula types: CONVERSION and BLEND. Both must be add/editable via ADMIN screens.
+- Formula(
+    id, name, type enum[CONVERSION, BLEND],
+    outputProductId,
+    inputBasis enum[PER_UNIT_OUTPUT, PER_UNIT_INPUT],  // allow flexible interpretation
+    active boolean,
+    version int,
+    createdAt
+  )
+
+CONVERSION DETAILS (e.g. Yogurt → DTY 2:1, Milk → Yogurt 1:1)
+- ConversionFormula(
+    id, formulaId (FK),
+    inputProductId,
+    ratioNumerator, ratioDenominator,
+    notes
+  )
+Interpretation: default PER_UNIT_OUTPUT meaning:
+  inputQty = outputQty * (ratioNumerator/ratioDenominator)
+Example 2:1 means to produce 1 output you need 2 input.
+
+BLEND DETAILS (e.g. Smoothie = 0.86 yogurt + 0.14 pulp)
+- BlendComponent(
+    id, formulaId (FK),
+    componentProductId,
+    fraction decimal(0..1),
+    notes
+  )
+Rule: fractions must sum to 1.00 for an active blend formula.
+
+FORMULA APPLICATION RULES (CRITICAL)
+- Each Product can have 0..N active formulas (versions).
+- For expected yield calculations, the engine must pick the correct formula:
+  - If user selects a production “operation” or output product, the app suggests applicable active formulas.
+  - Admin can optionally set a “defaultFormulaId” per product.
+- The formula engine must be used by:
+  1) Data entry assistance:
+     - When DATA_ENTRY logs a Production Line Item, the UI must show “Expected input/output” based on selected formula.
+     - Allow manual override of quantities (because reality happens), but still compute variance.
+  2) Reporting:
+     - Expected outputs computed from inputs (or expected inputs from outputs) using the configured formulas.
+     - For BLEND products, expected component usage computed from finished output qty.
+  3) Validation:
+     - Warn (not block) when actual deviates beyond admin-configured tolerance thresholds.
+
+Admin settings:
+- YieldTolerance(productId, warnPercent, criticalPercent)
+
+Operational tables
+- DailyIntake(id, date, supplierId, productId, qty, unitType, createdByUserId, createdAt)
+  (productId allows intake of non-milk items later, default milk)
+
+- ProductionBatch(id, date, batchCode, notes, createdByUserId, createdAt)
+
+- ProductionLineItem(
+    id, batchId,
+    operationType enum[CONVERT, BLEND],
+    formulaId nullable,      // selected formula driving expected calc
+    inputProductId nullable, inputQty nullable,
+    outputProductId, outputQty,
+    unitType,
+    createdByUserId, createdAt
+  )
+For BLEND operations:
+- outputProductId + outputQty are recorded
+- formulaId must reference BLEND formula
+- system derives expected component usage from BlendComponent
+For CONVERT operations:
+- formulaId references CONVERSION formula and inputProductId must match formula
+
+- Packout(id, date, productId, qty, unitType, packSizeLabel, createdByUserId, createdAt)
+
+AUDITABILITY (CRITICAL)
+Immutable event ledger:
+- Event(
+    id, timestamp, actorUserId,
+    entityType, entityId,
+    action,
+    fieldName,
+    oldValue, newValue,
+    reason,
+    ipAddress,
+    metadataJson
+  )
+Rules:
+- Append-only; no update/delete of Event rows.
+- Every create/update/approve/reject writes Events.
+
+Change control (CRITICAL)
+- ChangeRequest(
+    id,
+    entityType, entityId,
+    fieldName,
+    proposedValue,
+    currentValue,
+    requestedByUserId,
+    requestedAt,
+    status enum[PENDING, APPROVED, REJECTED],
+    reviewedByAdminUserId,
+    reviewedAt,
+    adminComment
+  )
+
+Edit behavior:
+- DATA_ENTRY can create records.
+- DATA_ENTRY attempting to edit an existing saved record creates a ChangeRequest (PENDING). Record remains unchanged.
+- UI shows the affected field greyed-out with a “Pending” chip and the proposed value visible.
+- ADMIN has an Approvals screen to approve/reject.
+- If approved: apply change, write Events, mark request APPROVED.
+- If rejected: keep record, mark request REJECTED, write Events.
+- ADMIN edits still write Events (can either directly edit or via change request; either is OK, but must be auditable).
+
+UI / UX (IMPORTANT)
+Build a modern, uncluttered interface:
+- Sidebar: Dashboard, Intake, Production, Packouts, Yield Reports, Products, Formulas, Suppliers, Approvals (admin), Audit Log (admin), Settings (admin)
+- Products screen (admin):
+  - Add/edit products (name/category/unit type/intermediate)
+- Formulas screen (admin):
+  - Create formula: choose type (Conversion or Blend)
+  - For Conversion: select output product + input product + ratio
+  - For Blend: select output product + add components + fractions that sum to 1
+  - Versioning: edits create a new version; old versions remain for audit
+- Production entry:
+  - “Add Operation” button: Convert or Blend
+  - For Convert: pick output product, pick formula (defaults), enter output qty; app auto-calculates expected input qty; allow override with variance shown
+  - For Blend: pick blend product, enter output qty; app shows expected component quantities automatically
+- Yield Reports:
+  - Filters: date range, product/category
+  - Tables: expected vs actual, variance %, flagged exceptions
+- Audit Log:
+  - Filter by date/user/entity/action, view full event details
+
+REPORTING (CRITICAL)
+Compute:
+- Expected component usage:
+  - From Conversion formulas: expectedInput = outputQty * (numerator/denominator) (default)
+  - From Blend formulas: expectedComponent = outputQty * fraction
+- Actuals:
+  - Use ProductionLineItem actual input/output recorded
+  - Use Packout totals for finished goods movement
+Provide:
+- Daily rollups and range rollups
+- Product-level variance
+- “Exceptions” list where variance exceeds tolerance
+
+SECURITY / PERMISSIONS (CRITICAL)
+- Enforce RBAC server-side, never trust client.
+- DATA_ENTRY cannot create/edit products/formulas, cannot approve changes, cannot view audit log.
+- ADMIN can do everything.
+- Validate all inputs.
+
+SEED DATA (minimal, but ONLY as examples, not hardcoded logic)
+- Create admin + data entry accounts (credentials in README)
+- Add a few sample products and formulas so the app boots with examples
+But all logic must come from DB-configured products/formulas.
+
+DELIVERABLES
+- Full working app with migrations + seed
+- README: setup, env vars, run commands, seed credentials
+- Clean code structure
+- Focus on the formula engine + auditing + approvals
+
+BONUS (optional)
+- CSV export for reports + audit log
+- Simple dashboard charts for variance trends
