@@ -9,11 +9,11 @@ import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Plus, ArrowRight, AlertTriangle, CheckCircle2, Beaker } from "lucide-react";
+import { Plus, ArrowRight, AlertTriangle, CheckCircle2, Beaker, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
-type Product = { id: number; name: string; unitType: string };
+type Product = { id: number; name: string; unitType: string; category: string; active: boolean };
 type FormulaWithDetails = {
   id: number; name: string; type: "CONVERSION" | "BLEND"; outputProductId: number; active: boolean;
   conversion?: { inputProductId: number; ratioNumerator: string; ratioDenominator: string };
@@ -24,7 +24,7 @@ type LineItem = { id: number; batchCode: string; batchDate: string; operationTyp
 export default function Production() {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedFormulaId, setSelectedFormulaId] = useState("");
+  const [selectedProductId, setSelectedProductId] = useState("");
   const [outputQty, setOutputQty] = useState("");
   const [actualInputQty, setActualInputQty] = useState("");
   const [batchDate, setBatchDate] = useState(format(new Date(), "yyyy-MM-dd"));
@@ -34,49 +34,59 @@ export default function Production() {
   const { data: formulas = [] } = useQuery<FormulaWithDetails[]>({ queryKey: ["/api/formulas"] });
   const { data: lineItems = [] } = useQuery<LineItem[]>({ queryKey: ["/api/production/line-items"] });
 
-  const activeFormulas = formulas.filter(f => f.active);
-  const selectedFormula = formulas.find(f => f.id === parseInt(selectedFormulaId));
+  const activeProducts = products.filter(p => p.active && p.category !== "RAW_MILK");
+
+  const productOptions = useMemo(() => {
+    return activeProducts
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map(p => ({ value: String(p.id), label: p.name }));
+  }, [activeProducts]);
+
+  const selectedProduct = products.find(p => p.id === parseInt(selectedProductId));
+
+  const matchedFormula = useMemo(() => {
+    if (!selectedProductId) return null;
+    const pid = parseInt(selectedProductId);
+    return formulas.find(f => f.outputProductId === pid && f.active) || null;
+  }, [selectedProductId, formulas]);
+
   const getProductName = (id: number | null | undefined) => id ? products.find(p => p.id === id)?.name || `#${id}` : "";
   const getProductUnit = (id: number | null | undefined) => id ? products.find(p => p.id === id)?.unitType || "" : "";
 
-  const formulaOptions = useMemo(() => {
-    return activeFormulas.map(f => {
-      const outputName = getProductName(f.outputProductId);
-      let inputName = "";
-      let ratioLabel = "";
-      if (f.type === "CONVERSION" && f.conversion) {
-        inputName = getProductName(f.conversion.inputProductId);
-        const num = parseFloat(f.conversion.ratioNumerator);
-        const den = parseFloat(f.conversion.ratioDenominator);
-        ratioLabel = ` (${num}:${den})`;
-      }
-      const label = inputName ? `${inputName} → ${outputName}${ratioLabel}` : f.name;
-      return { value: String(f.id), label };
-    });
-  }, [activeFormulas, products]);
+  const unitLabel = (unitType: string) => {
+    if (unitType === "LITER") return "Litres";
+    if (unitType === "KG") return "Kilograms";
+    return "Units";
+  };
+
+  const unitShort = (unitType: string) => {
+    if (unitType === "LITER") return "L";
+    if (unitType === "KG") return "kg";
+    return "units";
+  };
 
   const calculations = useMemo(() => {
-    if (!selectedFormula || !outputQty) return null;
+    if (!matchedFormula || !outputQty) return null;
     const outQ = parseFloat(outputQty);
     if (isNaN(outQ) || outQ <= 0) return null;
-    if (selectedFormula.type === "CONVERSION" && selectedFormula.conversion) {
-      const ratio = parseFloat(selectedFormula.conversion.ratioNumerator) / parseFloat(selectedFormula.conversion.ratioDenominator);
+    if (matchedFormula.type === "CONVERSION" && matchedFormula.conversion) {
+      const ratio = parseFloat(matchedFormula.conversion.ratioNumerator) / parseFloat(matchedFormula.conversion.ratioDenominator);
       const expectedInput = outQ * ratio;
       let variance = 0;
       if (actualInputQty) {
         variance = ((parseFloat(actualInputQty) - expectedInput) / expectedInput) * 100;
       }
-      return { expectedInput, variancePercent: variance, inputProductId: selectedFormula.conversion.inputProductId };
+      return { expectedInput, variancePercent: variance, inputProductId: matchedFormula.conversion.inputProductId };
     }
-    if (selectedFormula.type === "BLEND" && selectedFormula.components) {
-      const comps = selectedFormula.components.map(c => ({
+    if (matchedFormula.type === "BLEND" && matchedFormula.components) {
+      const comps = matchedFormula.components.map(c => ({
         ...c,
         expectedQty: outQ * parseFloat(c.fraction),
       }));
       return { components: comps };
     }
     return null;
-  }, [selectedFormula, outputQty, actualInputQty]);
+  }, [matchedFormula, outputQty, actualInputQty]);
 
   const createBatchMutation = useMutation({
     mutationFn: async (data: any) => {
@@ -97,8 +107,8 @@ export default function Production() {
   });
 
   const handleSave = async () => {
-    if (!selectedFormula || !outputQty) return;
-    const operationType = selectedFormula.type === "CONVERSION" ? "CONVERT" : "BLEND";
+    if (!selectedProduct || !outputQty) return;
+    const operationType = matchedFormula?.type === "BLEND" ? "BLEND" : "CONVERT";
     try {
       const batch = await createBatchMutation.mutateAsync({
         date: batchDate,
@@ -109,19 +119,17 @@ export default function Production() {
       await createLineItemMutation.mutateAsync({
         batchId: batch.id,
         operationType,
-        formulaId: selectedFormula.id,
-        inputProductId: selectedFormula.type === "CONVERSION" ? selectedFormula.conversion?.inputProductId : null,
+        formulaId: matchedFormula?.id || null,
+        inputProductId: matchedFormula?.type === "CONVERSION" ? matchedFormula.conversion?.inputProductId : null,
         inputQty: actualInputQty || null,
-        outputProductId: selectedFormula.outputProductId,
+        outputProductId: selectedProduct.id,
         outputQty,
-        unitType: getProductUnit(selectedFormula.outputProductId),
+        unitType: selectedProduct.unitType,
       });
 
-      const isHigh = calculations?.variancePercent && Math.abs(calculations.variancePercent) > 5;
       toast({
         title: "Batch Recorded",
-        description: `Batch ${batchCode} saved successfully.`,
-        variant: isHigh ? "destructive" : "default",
+        description: `${selectedProduct.name} — ${parseFloat(outputQty).toLocaleString()} ${unitShort(selectedProduct.unitType)} logged.`,
       });
       setIsDialogOpen(false);
       resetForm();
@@ -133,7 +141,7 @@ export default function Production() {
   const resetForm = () => {
     setBatchCode(`B-${format(new Date(), "yyyyMMdd")}-${Math.floor(Math.random() * 1000)}`);
     setBatchDate(format(new Date(), "yyyy-MM-dd"));
-    setSelectedFormulaId("");
+    setSelectedProductId("");
     setOutputQty("");
     setActualInputQty("");
   };
@@ -143,7 +151,7 @@ export default function Production() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight" data-testid="text-production-title">Production</h2>
-          <p className="text-muted-foreground">Log daily processing batches. Pick a formula, enter quantities.</p>
+          <p className="text-muted-foreground">Record what was made today and how much raw material was used.</p>
         </div>
         <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="gap-2" data-testid="button-add-production">
           <Plus className="h-4 w-4" /> Record Batch
@@ -156,9 +164,9 @@ export default function Production() {
             <TableRow className="bg-muted/50">
               <TableHead>Batch Code</TableHead>
               <TableHead>Date</TableHead>
-              <TableHead>Operation</TableHead>
-              <TableHead>Output Product</TableHead>
+              <TableHead>Product Made</TableHead>
               <TableHead className="text-right">Qty Produced</TableHead>
+              <TableHead className="text-right">Raw Material Used</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -166,14 +174,17 @@ export default function Production() {
               <TableRow key={log.id} data-testid={`row-production-${log.id}`}>
                 <TableCell className="font-medium font-mono text-xs">{log.batchCode}</TableCell>
                 <TableCell>{log.batchDate}</TableCell>
-                <TableCell>
-                  <Badge variant={log.operationType === "CONVERT" ? "outline" : "secondary"}>
-                    {log.operationType === "CONVERT" ? "Process" : "Mix"}
-                  </Badge>
-                </TableCell>
-                <TableCell>{getProductName(log.outputProductId)}</TableCell>
+                <TableCell className="font-medium">{getProductName(log.outputProductId)}</TableCell>
                 <TableCell className="text-right font-medium">
-                  {parseFloat(log.outputQty).toLocaleString()} <span className="text-muted-foreground text-xs">{getProductUnit(log.outputProductId)}</span>
+                  {parseFloat(log.outputQty).toLocaleString()} <span className="text-muted-foreground text-xs">{unitShort(getProductUnit(log.outputProductId))}</span>
+                </TableCell>
+                <TableCell className="text-right text-muted-foreground">
+                  {log.inputQty ? (
+                    <>
+                      {parseFloat(log.inputQty).toLocaleString()} <span className="text-xs">{unitShort(getProductUnit(log.inputProductId))}</span>
+                      {log.inputProductId && <span className="text-xs ml-1">({getProductName(log.inputProductId)})</span>}
+                    </>
+                  ) : "—"}
                 </TableCell>
               </TableRow>
             ))}
@@ -187,131 +198,149 @@ export default function Production() {
       </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Beaker className="h-5 w-5" />
-              Record Production Batch
+              Record Production
             </DialogTitle>
             <DialogDescription>
-              Choose what you made and enter the quantities.
+              Pick what you made, enter how much, and we'll calculate the rest.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Date</Label>
+                <Input type="date" value={batchDate} onChange={e => setBatchDate(e.target.value)} data-testid="input-batch-date" />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Batch Code</Label>
+                <Input value={batchCode} onChange={e => setBatchCode(e.target.value)} className="font-mono text-sm" data-testid="input-batch-code" />
+              </div>
+            </div>
+
             <div className="space-y-2">
-              <Label className="text-sm font-medium">What did you produce?</Label>
+              <Label className="font-medium">What did you make?</Label>
               <SearchableSelect
-                options={formulaOptions}
-                value={selectedFormulaId}
-                onValueChange={(val) => { setSelectedFormulaId(val); setOutputQty(""); setActualInputQty(""); }}
-                placeholder="Pick a formula (e.g. Raw Milk → Yogurt Base)"
-                searchPlaceholder="Type to search..."
-                data-testid="select-formula"
+                options={productOptions}
+                value={selectedProductId}
+                onValueChange={(val) => { setSelectedProductId(val); setOutputQty(""); setActualInputQty(""); }}
+                placeholder="Search for a product..."
+                searchPlaceholder="Type product name..."
+                data-testid="select-output-product"
               />
             </div>
 
-            {selectedFormula && (
+            {selectedProduct && (
               <>
-                <Card className="bg-muted/30 border-dashed">
-                  <CardContent className="p-4 space-y-4">
-                    <div className="flex items-center gap-2 text-sm">
-                      <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800">
-                        {getProductName(selectedFormula.type === "CONVERSION" ? selectedFormula.conversion?.inputProductId : undefined) || "Inputs"}
-                      </Badge>
-                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800">
-                        {getProductName(selectedFormula.outputProductId)}
-                      </Badge>
-                      {selectedFormula.type === "CONVERSION" && selectedFormula.conversion && (
-                        <span className="text-xs text-muted-foreground ml-auto">
-                          Ratio: {parseFloat(selectedFormula.conversion.ratioNumerator)}:{parseFloat(selectedFormula.conversion.ratioDenominator)}
-                        </span>
-                      )}
-                    </div>
+                <div className="space-y-2">
+                  <Label className="font-medium">How much did you make?</Label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="number"
+                      placeholder="e.g. 500"
+                      value={outputQty}
+                      onChange={e => setOutputQty(e.target.value)}
+                      className="text-lg font-medium flex-1"
+                      autoFocus
+                      data-testid="input-output-qty"
+                    />
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">
+                      {unitLabel(selectedProduct.unitType)}
+                    </span>
+                  </div>
+                </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label className="text-xs text-muted-foreground">How much did you make?</Label>
-                        <Input
-                          type="number"
-                          placeholder="e.g. 500"
-                          value={outputQty}
-                          onChange={e => setOutputQty(e.target.value)}
-                          className="bg-background text-lg font-medium"
-                          autoFocus
-                          data-testid="input-output-qty"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                          {getProductUnit(selectedFormula.outputProductId) === "LITER" ? "Litres" : getProductUnit(selectedFormula.outputProductId) === "KG" ? "Kilograms" : "Units"} of {getProductName(selectedFormula.outputProductId)}
-                        </p>
+                {matchedFormula && matchedFormula.type === "CONVERSION" && matchedFormula.conversion && (
+                  <Card className="bg-muted/30 border-dashed">
+                    <CardContent className="p-4 space-y-4">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800">
+                          {getProductName(matchedFormula.conversion.inputProductId)}
+                        </Badge>
+                        <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800">
+                          {selectedProduct.name}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground ml-auto">
+                          {parseFloat(matchedFormula.conversion.ratioNumerator)}:{parseFloat(matchedFormula.conversion.ratioDenominator)}
+                        </span>
                       </div>
 
-                      {selectedFormula.type === "CONVERSION" && (
-                        <div className="space-y-2">
-                          <Label className="text-xs text-muted-foreground">How much raw material did you use?</Label>
+                      <div className="space-y-2">
+                        <Label className="font-medium">
+                          How much {getProductName(matchedFormula.conversion.inputProductId)} did you use?
+                        </Label>
+                        <div className="flex items-center gap-3">
                           <Input
                             type="number"
                             placeholder={calculations?.expectedInput ? `Expected: ${calculations.expectedInput.toFixed(1)}` : "..."}
                             value={actualInputQty}
                             onChange={e => setActualInputQty(e.target.value)}
-                            className={`bg-background ${calculations?.variancePercent && Math.abs(calculations.variancePercent) > 5 ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                            className={`flex-1 ${calculations?.variancePercent && Math.abs(calculations.variancePercent) > 5 ? "border-destructive focus-visible:ring-destructive" : ""}`}
                             data-testid="input-actual-input"
                           />
-                          {calculations?.expectedInput && (
-                            <p className="text-xs text-muted-foreground">
-                              Target: {calculations.expectedInput.toFixed(1)} {getProductUnit(calculations.inputProductId) === "LITER" ? "L" : getProductUnit(calculations.inputProductId) === "KG" ? "kg" : "units"}
-                            </p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {selectedFormula.type === "CONVERSION" && calculations?.variancePercent !== undefined && actualInputQty && (
-                      <div className={`p-3 rounded-lg text-sm flex items-center gap-2 ${Math.abs(calculations.variancePercent) > 5 ? "bg-destructive/10 text-destructive" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"}`}>
-                        {Math.abs(calculations.variancePercent) > 5 ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <CheckCircle2 className="h-4 w-4 shrink-0" />}
-                        <div>
-                          <span className="font-medium">Variance: {calculations.variancePercent > 0 ? "+" : ""}{calculations.variancePercent.toFixed(1)}%</span>
-                          <span className="text-xs opacity-80 ml-2">
-                            ({calculations.variancePercent > 0 ? "used more than expected" : "used less than expected"})
+                          <span className="text-sm text-muted-foreground whitespace-nowrap">
+                            {unitLabel(getProductUnit(matchedFormula.conversion.inputProductId))}
                           </span>
                         </div>
+                        {calculations?.expectedInput && (
+                          <p className="text-xs text-muted-foreground">
+                            Based on the formula, you should need about {calculations.expectedInput.toFixed(1)} {unitShort(getProductUnit(matchedFormula.conversion.inputProductId))}
+                          </p>
+                        )}
                       </div>
-                    )}
 
-                    {selectedFormula.type === "BLEND" && calculations?.components && (
-                      <div className="space-y-2">
-                        <Label className="text-xs text-muted-foreground">Expected ingredients needed:</Label>
-                        <div className="grid gap-2 text-sm">
-                          {calculations.components.map((c: any, i: number) => (
-                            <div key={i} className="flex justify-between items-center bg-background p-2 rounded border">
-                              <span>{getProductName(c.componentProductId)}</span>
-                              <span className="font-mono">{c.expectedQty.toFixed(1)} {getProductUnit(c.componentProductId)}</span>
-                            </div>
-                          ))}
+                      {calculations?.variancePercent !== undefined && actualInputQty && (
+                        <div className={`p-3 rounded-lg text-sm flex items-center gap-2 ${Math.abs(calculations.variancePercent) > 5 ? "bg-destructive/10 text-destructive" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"}`}>
+                          {Math.abs(calculations.variancePercent) > 5 ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <CheckCircle2 className="h-4 w-4 shrink-0" />}
+                          <div>
+                            <span className="font-medium">
+                              {Math.abs(calculations.variancePercent) <= 5 ? "Within range" : `Variance: ${calculations.variancePercent > 0 ? "+" : ""}${calculations.variancePercent.toFixed(1)}%`}
+                            </span>
+                            {Math.abs(calculations.variancePercent) > 5 && (
+                              <span className="text-xs opacity-80 ml-2">
+                                ({calculations.variancePercent > 0 ? "used more than expected" : "used less than expected"})
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Date</Label>
-                    <Input type="date" value={batchDate} onChange={e => setBatchDate(e.target.value)} data-testid="input-batch-date" />
+                {matchedFormula && matchedFormula.type === "BLEND" && calculations?.components && (
+                  <Card className="bg-muted/30 border-dashed">
+                    <CardContent className="p-4 space-y-3">
+                      <Label className="text-xs text-muted-foreground font-medium">Ingredients needed:</Label>
+                      <div className="grid gap-2 text-sm">
+                        {calculations.components.map((c: any, i: number) => (
+                          <div key={i} className="flex justify-between items-center bg-background p-2 rounded border">
+                            <span>{getProductName(c.componentProductId)}</span>
+                            <span className="font-mono">{c.expectedQty.toFixed(1)} {unitShort(getProductUnit(c.componentProductId))}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {!matchedFormula && outputQty && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 text-sm text-muted-foreground">
+                    <Info className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span>No formula set up for this product yet. Production will be recorded without variance tracking. An admin can add a formula later.</span>
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs text-muted-foreground">Batch Code</Label>
-                    <Input value={batchCode} onChange={e => setBatchCode(e.target.value)} className="font-mono text-sm" data-testid="input-batch-code" />
-                  </div>
-                </div>
+                )}
               </>
             )}
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={!selectedFormula || !outputQty || createBatchMutation.isPending} data-testid="button-save-batch">
+            <Button onClick={handleSave} disabled={!selectedProduct || !outputQty || createBatchMutation.isPending} data-testid="button-save-batch">
               Save Batch
             </Button>
           </DialogFooter>
