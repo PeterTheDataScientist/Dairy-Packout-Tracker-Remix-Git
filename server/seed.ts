@@ -127,6 +127,9 @@ async function seedProducts() {
     { name: "ZIM DELI GARLIC DIP 250g", category: "DIP" as const, unitType: "UNIT" as const, isIntermediate: false },
 
     { name: "ZIM DELI HODZEKO BULK", category: "HODZEKO" as const, unitType: "KG" as const, isIntermediate: false },
+
+    { name: "YOGURT BASE (BULK)", category: "YOGURT" as const, unitType: "LITER" as const, isIntermediate: false },
+    { name: "YOGURT BASE 20L BUCKET", category: "YOGURT" as const, unitType: "UNIT" as const, isIntermediate: false },
   ];
 
   for (const product of allProducts) {
@@ -134,4 +137,55 @@ async function seedProducts() {
   }
 
   console.log(`Seeded ${allProducts.length} products.`);
+
+  await seedFormulas();
+}
+
+async function seedFormulas() {
+  const existingFormulas = await db.select().from(formulas);
+  if (existingFormulas.length > 0) {
+    console.log("Formulas already exist, skipping formula seed...");
+    return;
+  }
+
+  const allProducts = await db.select().from(products);
+  const findProduct = (name: string) => allProducts.find(p => p.name === name);
+
+  const rawMilk = findProduct("YOMILK RAW MILK 5 LTR");
+  const yogurtBase = findProduct("YOGURT BASE (BULK)");
+  const doubleThick = findProduct("YOMILK DOUBLE THICK GREEK YOGURT 20 LTR");
+  const creamCheese = findProduct("YOMILK CREAM CHEESE 1L");
+  const smoothie = findProduct("YOMILK YO' SMOOTHY STRAWBERRY 300ML");
+
+  if (!rawMilk || !yogurtBase || !doubleThick || !creamCheese || !smoothie) {
+    console.log("Some products not found, skipping formula seed...");
+    return;
+  }
+
+  const formulaDefs = [
+    { name: "Raw Milk to Yogurt Base", outputId: yogurtBase.id, inputId: rawMilk.id, num: 1, den: 1 },
+    { name: "Yogurt Base to Double Thick Yogurt", outputId: doubleThick.id, inputId: yogurtBase.id, num: 2, den: 1 },
+    { name: "Yogurt Base to Cream Cheese", outputId: creamCheese.id, inputId: yogurtBase.id, num: 3, den: 1 },
+    { name: "Yogurt Base to Smoothie", outputId: smoothie.id, inputId: yogurtBase.id, num: 1, den: 1 },
+  ];
+
+  for (const def of formulaDefs) {
+    const [formula] = await db.insert(formulas).values({
+      name: def.name,
+      type: "CONVERSION" as const,
+      outputProductId: def.outputId,
+      inputBasis: "PER_UNIT_OUTPUT" as const,
+      active: true,
+      version: 1,
+    }).returning();
+
+    await db.insert(conversionFormulas).values({
+      formulaId: formula.id,
+      inputProductId: def.inputId,
+      ratioNumerator: String(def.num),
+      ratioDenominator: String(def.den),
+    });
+  }
+
+  console.log(`Seeded ${formulaDefs.length} formulas.`);
 }
