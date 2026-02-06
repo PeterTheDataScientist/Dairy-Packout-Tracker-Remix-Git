@@ -128,6 +128,7 @@ async function seedProducts() {
 
     { name: "ZIM DELI HODZEKO BULK", category: "HODZEKO" as const, unitType: "KG" as const, isIntermediate: false },
 
+    { name: "RAW MILK", category: "RAW_MILK" as const, unitType: "LITER" as const, isIntermediate: true },
     { name: "YOGURT BASE (BULK)", category: "YOGURT" as const, unitType: "LITER" as const, isIntermediate: false },
     { name: "YOGURT BASE 20L BUCKET", category: "YOGURT" as const, unitType: "UNIT" as const, isIntermediate: false },
   ];
@@ -151,25 +152,79 @@ async function seedFormulas() {
   const allProducts = await db.select().from(products);
   const findProduct = (name: string) => allProducts.find(p => p.name === name);
 
-  const rawMilk = findProduct("YOMILK RAW MILK 5 LTR");
+  const rawMilkPkg = findProduct("YOMILK RAW MILK 5 LTR");
+  const rawMilkBulk = findProduct("RAW MILK");
   const yogurtBase = findProduct("YOGURT BASE (BULK)");
   const doubleThick = findProduct("YOMILK DOUBLE THICK GREEK YOGURT 20 LTR");
   const creamCheese = findProduct("YOMILK CREAM CHEESE 1L");
-  const smoothie = findProduct("YOMILK YO' SMOOTHY STRAWBERRY 300ML");
+  const smoothieStrawberry = findProduct("YOMILK YO' SMOOTHY STRAWBERRY 300ML");
+  const smoothiePassion = findProduct("YOMILK YO' SMOOTHY PASSION FRUIT 300ML");
+  const smoothieBerry = findProduct("YOMILK YO' SMOOTHY MIXED BERRY 300ML");
+  const smoothiePina = findProduct("YOMILK YO' SMOOTHY PINA COLADA 300ML");
+  const smoothieMango = findProduct("YOMILK YO' SMOOTHY MANGO 300ML");
+  const freshMilk = findProduct("YOMILK FRESH MILK 1 LTR");
+  const yolac = findProduct("YOMILK YOLAC 1L BOTTLE");
+  const feta = findProduct("YOMILK PLAIN FETA 220G");
+  const hodzeko = findProduct("ZIM DELI HODZEKO BULK");
+  const plainYogurt = findProduct("YOMILK PLAIN YOGURT BOTTLE 1L");
+  const strawberryYogurt = findProduct("YOMILK STRAWBERRY YOGURT 1 LTR");
+  const bananaYogurt = findProduct("YOMILK BANANA YOGURT 1 LTR");
+  const passionYogurt = findProduct("YOMILK PASSION FRUIT YOGURT 1 LTR");
+  const vanillaYogurt = findProduct("YOMILK VANILLA YOGURT 1 LTR");
+  const probioYogurt = findProduct("ZIM DELI PROBIO DRINKING YOGURT 1 LTR");
+  const cucumberDillDip = findProduct("ZIM DELI CREAM CHEESE CUCUMBER AND DILL DIP 250g");
+  const blackPepperDip = findProduct("ZIM DELI CREAM CHEESE BLACK PEPPER DIP 250g");
+  const sweetChilliDip = findProduct("ZIM DELI CREAM CHEESE SWEET CHILLI DIP 250g");
+  const avoDip = findProduct("KAVA CREAMY AVO DIP 250g");
+  const kavaCucumberDip = findProduct("KAVA CUCUMBER AND DILL DIP 250g");
+  const biltongDip = findProduct("ZIM DELI BILTONG DIP 250g");
+  const mexicanDip = findProduct("ZIM DELI MEXICAN CHILLI DIP 250g");
+  const garlicDip = findProduct("ZIM DELI GARLIC DIP 250g");
 
-  if (!rawMilk || !yogurtBase || !doubleThick || !creamCheese || !smoothie) {
-    console.log("Some products not found, skipping formula seed...");
+  const rawMilkInput = rawMilkBulk || rawMilkPkg;
+  if (!rawMilkInput || !yogurtBase) {
+    console.log("Critical products not found, skipping formula seed...");
     return;
   }
 
-  const formulaDefs = [
-    { name: "Raw Milk to Yogurt Base", outputId: yogurtBase.id, inputId: rawMilk.id, num: 1, den: 1 },
-    { name: "Yogurt Base to Double Thick Yogurt", outputId: doubleThick.id, inputId: yogurtBase.id, num: 2, den: 1 },
-    { name: "Yogurt Base to Cream Cheese", outputId: creamCheese.id, inputId: yogurtBase.id, num: 3, den: 1 },
-    { name: "Yogurt Base to Smoothie", outputId: smoothie.id, inputId: yogurtBase.id, num: 1, den: 1 },
-  ];
+  const conversionDefs: { name: string; outputId: number; inputId: number; num: number; den: number }[] = [];
 
-  for (const def of formulaDefs) {
+  const addConversion = (name: string, output: any, input: any, num: number, den: number = 1) => {
+    if (output && input) {
+      conversionDefs.push({ name, outputId: output.id, inputId: input.id, num, den });
+    }
+  };
+
+  addConversion("Raw Milk to Yogurt Base", yogurtBase, rawMilkInput, 1, 1);
+  addConversion("Raw Milk to Fresh Milk", freshMilk, rawMilkInput, 1, 1);
+  addConversion("Raw Milk to Yolac", yolac, rawMilkInput, 1.1, 1);
+  addConversion("Raw Milk to Feta", feta, rawMilkInput, 7, 1);
+  addConversion("Raw Milk to Hodzeko", hodzeko, rawMilkInput, 1.2, 1);
+
+  addConversion("Yogurt Base to Double Thick Yogurt", doubleThick, yogurtBase, 2, 1);
+  addConversion("Yogurt Base to Cream Cheese", creamCheese, yogurtBase, 3, 1);
+  addConversion("Yogurt Base to Plain Yogurt", plainYogurt, yogurtBase, 1, 1);
+  addConversion("Yogurt Base to Strawberry Yogurt", strawberryYogurt, yogurtBase, 1, 1);
+  addConversion("Yogurt Base to Banana Yogurt", bananaYogurt, yogurtBase, 1, 1);
+  addConversion("Yogurt Base to Passion Fruit Yogurt", passionYogurt, yogurtBase, 1, 1);
+  addConversion("Yogurt Base to Vanilla Yogurt", vanillaYogurt, yogurtBase, 1, 1);
+  addConversion("Yogurt Base to Probiotic Yogurt", probioYogurt, yogurtBase, 1, 1);
+  addConversion("Yogurt Base to Strawberry Smoothie", smoothieStrawberry, yogurtBase, 1, 1);
+  addConversion("Yogurt Base to Passion Fruit Smoothie", smoothiePassion, yogurtBase, 1, 1);
+  addConversion("Yogurt Base to Mixed Berry Smoothie", smoothieBerry, yogurtBase, 1, 1);
+  addConversion("Yogurt Base to Pina Colada Smoothie", smoothiePina, yogurtBase, 1, 1);
+  addConversion("Yogurt Base to Mango Smoothie", smoothieMango, yogurtBase, 1, 1);
+
+  addConversion("Cream Cheese to Cucumber & Dill Dip", cucumberDillDip, creamCheese, 1, 1);
+  addConversion("Cream Cheese to Black Pepper Dip", blackPepperDip, creamCheese, 1, 1);
+  addConversion("Cream Cheese to Sweet Chilli Dip", sweetChilliDip, creamCheese, 1, 1);
+  addConversion("Cream Cheese to Creamy Avo Dip", avoDip, creamCheese, 1, 1);
+  addConversion("Cream Cheese to Kava Cucumber Dill Dip", kavaCucumberDip, creamCheese, 1, 1);
+  addConversion("Cream Cheese to Biltong Dip", biltongDip, creamCheese, 1, 1);
+  addConversion("Cream Cheese to Mexican Chilli Dip", mexicanDip, creamCheese, 1, 1);
+  addConversion("Cream Cheese to Garlic Dip", garlicDip, creamCheese, 1, 1);
+
+  for (const def of conversionDefs) {
     const [formula] = await db.insert(formulas).values({
       name: def.name,
       type: "CONVERSION" as const,
@@ -187,5 +242,5 @@ async function seedFormulas() {
     });
   }
 
-  console.log(`Seeded ${formulaDefs.length} formulas.`);
+  console.log(`Seeded ${conversionDefs.length} formulas.`);
 }
