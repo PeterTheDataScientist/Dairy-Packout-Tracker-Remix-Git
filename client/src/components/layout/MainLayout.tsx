@@ -20,13 +20,28 @@ import {
   ShieldCheck,
   Beaker,
   History,
-  LogOut
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
+  Home
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+
+const routeTitles: Record<string, string> = {
+  "/": "Dashboard",
+  "/intake": "Intake",
+  "/production": "Production",
+  "/packouts": "Packouts",
+  "/reports": "Reports",
+  "/products": "Products",
+  "/formulas": "Formulas",
+  "/approvals": "Approvals",
+  "/my-history": "My History",
+};
 
 export function AppSidebar() {
   const [location] = useLocation();
@@ -134,16 +149,42 @@ export function AppSidebar() {
 }
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
+  const [location, setLocation] = useLocation();
+  const pageTitle = routeTitles[location] || "Not Found";
+  const isHome = location === "/";
+
   return (
     <SidebarProvider>
       <div className="flex min-h-screen w-full bg-background">
         <AppSidebar />
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden transition-all duration-300 ease-in-out">
-          <header className="h-16 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center px-6 sticky top-0 z-10 justify-between">
-            <div className="flex items-center gap-4">
+          <header className="h-14 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center px-6 sticky top-0 z-10 justify-between">
+            <div className="flex items-center gap-3">
               <SidebarTrigger />
               <Separator orientation="vertical" className="h-6" />
-              <h1 className="font-semibold text-lg text-foreground/80">Dashboard</h1>
+              {!isHome && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => window.history.back()}
+                  data-testid="button-back"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+              )}
+              <nav className="flex items-center gap-1.5 text-sm" data-testid="breadcrumb-nav">
+                <Link href="/" className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors">
+                  <Home className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Home</span>
+                </Link>
+                {!isHome && (
+                  <>
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/50" />
+                    <span className="font-medium text-foreground">{pageTitle}</span>
+                  </>
+                )}
+              </nav>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">System v1.0.4</span>
