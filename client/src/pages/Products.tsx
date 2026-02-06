@@ -62,7 +62,7 @@ export default function Products() {
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [formData, setFormData] = useState({ name: "", category: "OTHER", unitType: "UNIT", isIntermediate: false, active: true });
+  const [formData, setFormData] = useState({ name: "", category: "OTHER", unitType: "UNIT", active: true });
 
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
   const { data: formulas = [] } = useQuery<FormulaWithDetails[]>({ queryKey: ["/api/formulas"] });
@@ -74,6 +74,19 @@ export default function Products() {
       map[f.outputProductId].push(f);
     }
     return map;
+  }, [formulas]);
+
+  const usedAsInput = useMemo(() => {
+    const ids = new Set<number>();
+    for (const f of formulas) {
+      if (f.type === "CONVERSION" && f.conversion) {
+        ids.add(f.conversion.inputProductId);
+      }
+      if (f.type === "BLEND" && f.components) {
+        for (const c of f.components) ids.add(c.componentProductId);
+      }
+    }
+    return ids;
   }, [formulas]);
 
   const createMutation = useMutation({
@@ -130,13 +143,13 @@ export default function Products() {
 
   const handleEdit = (product: Product) => {
     setEditingId(product.id);
-    setFormData({ name: product.name, category: product.category, unitType: product.unitType, isIntermediate: product.isIntermediate, active: product.active });
+    setFormData({ name: product.name, category: product.category, unitType: product.unitType, active: product.active });
     setIsDialogOpen(true);
   };
 
   const resetForm = () => {
     setEditingId(null);
-    setFormData({ name: "", category: "OTHER", unitType: "UNIT", isIntermediate: false, active: true });
+    setFormData({ name: "", category: "OTHER", unitType: "UNIT", active: true });
   };
 
   const getProductName = (id: number) => products.find(p => p.id === id)?.name || `#${id}`;
@@ -179,6 +192,7 @@ export default function Products() {
               <TableHead>Category</TableHead>
               <TableHead>Unit</TableHead>
               <TableHead>Formula</TableHead>
+              <TableHead>Usage</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -191,9 +205,6 @@ export default function Products() {
                 <TableRow key={product.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => handleEdit(product)} data-testid={`row-product-${product.id}`}>
                   <TableCell>
                     <div className="font-medium">{product.name}</div>
-                    {product.isIntermediate && (
-                      <span className="text-xs text-blue-600">Intermediate</span>
-                    )}
                   </TableCell>
                   <TableCell>
                     <Badge variant="outline" className={`font-normal border ${categoryColors[product.category] || categoryColors.OTHER}`}>
@@ -233,6 +244,13 @@ export default function Products() {
                       </div>
                     )}
                   </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      {hasFormula && <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-blue-50 text-blue-700 border-blue-200">Output</Badge>}
+                      {usedAsInput.has(product.id) && <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-50 text-amber-700 border-amber-200">Input</Badge>}
+                      {!hasFormula && !usedAsInput.has(product.id) && <span className="text-xs text-muted-foreground/50">—</span>}
+                    </div>
+                  </TableCell>
                   <TableCell><div className={`h-2.5 w-2.5 rounded-full ${product.active ? "bg-emerald-500" : "bg-gray-300"}`} /></TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handleEdit(product); }}>Edit</Button>
@@ -242,7 +260,7 @@ export default function Products() {
             })}
             {filteredProducts.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                   {searchTerm || categoryFilter !== "ALL" ? "No products match your filters." : "No products yet."}
                 </TableCell>
               </TableRow>
@@ -287,13 +305,6 @@ export default function Products() {
                   <SelectItem value="UNIT">Unit (Each)</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Intermediate</Label>
-              <div className="flex items-center space-x-2 col-span-3">
-                <Switch checked={formData.isIntermediate} onCheckedChange={(c) => setFormData({ ...formData, isIntermediate: c })} data-testid="switch-intermediate" />
-                <span className="text-xs text-muted-foreground">Is this used as an ingredient?</span>
-              </div>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label className="text-right">Active</Label>

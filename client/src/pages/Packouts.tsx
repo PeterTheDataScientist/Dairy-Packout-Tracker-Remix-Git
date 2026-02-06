@@ -11,7 +11,7 @@ import { Plus, Package } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
-type Product = { id: number; name: string; unitType: string; isIntermediate: boolean; active: boolean };
+type Product = { id: number; name: string; category: string; unitType: string; active: boolean };
 type Packout = { id: number; date: string; productId: number; qty: string; unitType: string; packSizeLabel: string | null };
 
 export default function Packouts() {
@@ -22,7 +22,7 @@ export default function Packouts() {
   const { data: packouts = [] } = useQuery<Packout[]>({ queryKey: ["/api/packouts"] });
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
 
-  const finishedGoods = products.filter(p => !p.isIntermediate && p.active);
+  const finishedGoods = products.filter(p => p.category !== "RAW_MILK" && p.active);
   const getProductName = (id: number) => products.find(p => p.id === id)?.name || `#${id}`;
 
   const createMutation = useMutation({
