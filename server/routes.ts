@@ -7,6 +7,75 @@ import passport from "passport";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 
+async function computeConversionInputQty(
+  formulaId: number | null | undefined,
+  outputQty: string,
+  outputProductId: number
+): Promise<{ inputQty: string; inputProductId: number; autoFilled: boolean } | null> {
+  if (!formulaId) {
+    const formulas = await storage.getFormulasByOutputProduct(outputProductId);
+    const activeConversion = formulas.find(f => f.type === "CONVERSION" && f.active);
+    if (!activeConversion) return null;
+    formulaId = activeConversion.id;
+  }
+  const formula = await storage.getFormula(formulaId);
+  if (!formula || formula.type !== "CONVERSION") return null;
+  const conversion = await storage.getConversionByFormulaId(formulaId);
+  if (!conversion) return null;
+  const outQ = parseFloat(outputQty);
+  if (isNaN(outQ) || outQ <= 0) return null;
+
+  // For UNIT output products with pack size, convert units to volume first
+  const allProducts = await storage.getProducts();
+  const outputProduct = allProducts.find(p => p.id === outputProductId);
+  let effectiveOutputQty = outQ;
+  if (outputProduct && outputProduct.unitType === "UNIT" && outputProduct.packSizeQty) {
+    effectiveOutputQty = outQ * parseFloat(outputProduct.packSizeQty);
+  }
+
+  const ratio = parseFloat(conversion.ratioNumerator) / parseFloat(conversion.ratioDenominator);
+  const computedInput = effectiveOutputQty * ratio;
+  return {
+    inputQty: computedInput.toFixed(4),
+    inputProductId: conversion.inputProductId,
+    autoFilled: true,
+  };
+}
+
+async function findDataGaps(dateFrom?: string, dateTo?: string) {
+  const allLineItems = await storage.getAllLineItems(dateFrom, dateTo);
+  const gaps: Array<{
+    lineItemId: number;
+    batchCode: string;
+    batchDate: string;
+    outputProductName: string;
+    inputProductName: string;
+    outputQty: string;
+    issue: string;
+  }> = [];
+  const allProducts = await storage.getProducts();
+  const productMap = new Map(allProducts.map(p => [p.id, p]));
+
+  for (const li of allLineItems) {
+    if (li.operationType !== "CONVERT") continue;
+    const hasInputQty = li.inputQty && parseFloat(li.inputQty) > 0;
+    if (!hasInputQty) {
+      const outputProduct = productMap.get(li.outputProductId);
+      const inputProduct = li.inputProductId ? productMap.get(li.inputProductId) : null;
+      gaps.push({
+        lineItemId: li.id,
+        batchCode: li.batchCode,
+        batchDate: li.batchDate,
+        outputProductName: outputProduct?.name || `Product #${li.outputProductId}`,
+        inputProductName: inputProduct?.name || "Unknown",
+        outputQty: li.outputQty,
+        issue: "CONVERSION operation with no input quantity recorded",
+      });
+    }
+  }
+  return gaps;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -323,8 +392,20 @@ export async function registerRoutes(
   });
 
   app.post("/api/production/line-items", requireAuth, async (req, res) => {
+    const body = { ...req.body };
+    let inputAutoFilled = false;
+
+    if (body.operationType === "CONVERT" && (!body.inputQty || body.inputQty === "")) {
+      const computed = await computeConversionInputQty(body.formulaId, body.outputQty, body.outputProductId);
+      if (computed) {
+        body.inputQty = computed.inputQty;
+        body.inputProductId = body.inputProductId || computed.inputProductId;
+        inputAutoFilled = true;
+      }
+    }
+
     const l = await storage.createLineItem({
-      ...req.body,
+      ...body,
       createdByUserId: req.user!.id,
     });
     await storage.createEvent({
@@ -337,9 +418,9 @@ export async function registerRoutes(
       oldValue: null,
       newValue: JSON.stringify(l),
       reason: null,
-      metadataJson: null,
+      metadataJson: inputAutoFilled ? JSON.stringify({ inputQtyAutoFilled: true }) : null,
     });
-    res.status(201).json(l);
+    res.status(201).json({ ...l, inputQtyAutoFilled: inputAutoFilled });
   });
 
   app.put("/api/production/line-items/:id", requireAdmin, async (req, res) => {
@@ -354,6 +435,21 @@ export async function registerRoutes(
     if (inputProductId !== undefined) updates.inputProductId = inputProductId;
     if (formulaId !== undefined) updates.formulaId = formulaId;
     if (operationType !== undefined) updates.operationType = operationType;
+
+    let inputAutoFilled = false;
+    const effectiveOpType = operationType || existing.operationType;
+    if (effectiveOpType === "CONVERT" && (!updates.inputQty || updates.inputQty === "" || updates.inputQty === null)) {
+      const effectiveOutputQty = updates.outputQty || existing.outputQty;
+      const effectiveOutputProductId = updates.outputProductId || existing.outputProductId;
+      const effectiveFormulaId = updates.formulaId !== undefined ? updates.formulaId : existing.formulaId;
+      const computed = await computeConversionInputQty(effectiveFormulaId, effectiveOutputQty, effectiveOutputProductId);
+      if (computed) {
+        updates.inputQty = computed.inputQty;
+        if (!updates.inputProductId) updates.inputProductId = computed.inputProductId;
+        inputAutoFilled = true;
+      }
+    }
+
     const updated = await storage.updateLineItem(id, updates);
     await storage.createEvent({
       actorUserId: req.user!.id,
@@ -365,9 +461,9 @@ export async function registerRoutes(
       oldValue: JSON.stringify(existing),
       newValue: JSON.stringify(updated),
       reason: null,
-      metadataJson: null,
+      metadataJson: inputAutoFilled ? JSON.stringify({ inputQtyAutoFilled: true }) : null,
     });
-    res.json(updated);
+    res.json({ ...updated, inputQtyAutoFilled: inputAutoFilled });
   });
 
   app.delete("/api/production/line-items/:id", requireAdmin, async (req, res) => {
@@ -1073,6 +1169,7 @@ export async function registerRoutes(
       };
     });
 
+    const dataGaps = await findDataGaps(dateFrom as string, dateTo as string);
     res.json({
       rawMilk: {
         productIds: Array.from(rawMilkIds),
@@ -1082,6 +1179,7 @@ export async function registerRoutes(
         productIds: Array.from(yogurtBaseIds),
         rows: yogurtBaseRows,
       },
+      dataGaps,
     });
   });
 
@@ -1149,10 +1247,12 @@ export async function registerRoutes(
       lineItems: bucket.lineItems,
     }));
 
+    const dataGaps = await findDataGaps(dateStr, dateStr);
     res.json({
       date: dateStr,
       totalRawMilkReceived: Math.round(totalRawMilkReceived * 100) / 100,
       allocations,
+      dataGaps,
     });
   });
 
