@@ -210,6 +210,7 @@ export const changeRequests = pgTable("change_requests", {
   fieldName: text("field_name").notNull(),
   proposedValue: text("proposed_value").notNull(),
   currentValue: text("current_value"),
+  reason: text("reason"),
   requestedByUserId: integer("requested_by_user_id").notNull().references(() => users.id),
   requestedAt: timestamp("requested_at").notNull().defaultNow(),
   status: changeRequestStatusEnum("status").notNull().default("PENDING"),
