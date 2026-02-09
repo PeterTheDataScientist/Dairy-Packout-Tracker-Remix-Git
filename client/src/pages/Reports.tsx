@@ -1,9 +1,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 
 type MassBalanceRow = {
   productId: number; productName: string; unitType: string;
@@ -17,9 +18,15 @@ type VarianceRow = {
   variancePercent: number; varianceQty: number;
 };
 
+type DailyMilkBalanceRow = {
+  date: string; intake: number; used: number; produced: number;
+  difference: number; runningStock: number; flag: "OK" | "OVER_USE" | "HIGH_VARIANCE";
+};
+
 export default function Reports() {
   const { data: massBalance = [] } = useQuery<MassBalanceRow[]>({ queryKey: ["/api/reports/mass-balance"] });
   const { data: varianceData = [] } = useQuery<VarianceRow[]>({ queryKey: ["/api/reports/variance"] });
+  const { data: milkBalance = [] } = useQuery<DailyMilkBalanceRow[]>({ queryKey: ["/api/reports/daily-milk-balance"] });
 
   const chartData = varianceData.map(v => ({
     batch: v.batchCode.split("-").pop(),
@@ -28,6 +35,30 @@ export default function Reports() {
     variance: v.variancePercent,
     name: v.outputProduct,
   }));
+
+  const milkChartData = [...milkBalance].reverse().map(row => ({
+    date: row.date.substring(5),
+    intake: row.intake,
+    used: row.used,
+    difference: row.difference,
+    stock: row.runningStock,
+  }));
+
+  const flagIcon = (flag: string) => {
+    if (flag === "OVER_USE") return <XCircle className="h-4 w-4 text-red-500" />;
+    if (flag === "HIGH_VARIANCE") return <AlertTriangle className="h-4 w-4 text-amber-500" />;
+    return <CheckCircle className="h-4 w-4 text-emerald-500" />;
+  };
+
+  const flagLabel = (flag: string) => {
+    if (flag === "OVER_USE") return "Used more than received";
+    if (flag === "HIGH_VARIANCE") return "Large gap (>15%)";
+    return "OK";
+  };
+
+  const overUseCount = milkBalance.filter(r => r.flag === "OVER_USE").length;
+  const highVarCount = milkBalance.filter(r => r.flag === "HIGH_VARIANCE").length;
+  const latestStock = milkBalance.length > 0 ? milkBalance[0].runningStock : 0;
 
   return (
     <div className="space-y-6">
@@ -38,11 +69,133 @@ export default function Reports() {
         </div>
       </div>
 
-      <Tabs defaultValue="balance">
+      <Tabs defaultValue="milk-balance">
         <TabsList>
-          <TabsTrigger value="balance" data-testid="tab-mass-balance">Daily Overs/Unders (Mass Balance)</TabsTrigger>
-          <TabsTrigger value="variance" data-testid="tab-variance">Batch Variance Analysis</TabsTrigger>
+          <TabsTrigger value="milk-balance" data-testid="tab-milk-balance">Daily Milk Balance</TabsTrigger>
+          <TabsTrigger value="balance" data-testid="tab-mass-balance">Product Balance</TabsTrigger>
+          <TabsTrigger value="variance" data-testid="tab-variance">Batch Variance</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="milk-balance" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-sm text-muted-foreground">Running Stock</div>
+                <div className={`text-2xl font-bold ${latestStock < 0 ? "text-red-600" : "text-emerald-600"}`}>
+                  {latestStock > 0 ? "+" : ""}{latestStock.toFixed(1)} L
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Cumulative milk received minus used</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-sm text-muted-foreground flex items-center gap-1.5">
+                  <XCircle className="h-3.5 w-3.5 text-red-500" /> Over-Use Days
+                </div>
+                <div className={`text-2xl font-bold ${overUseCount > 0 ? "text-red-600" : "text-muted-foreground"}`}>
+                  {overUseCount}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Days where more milk was claimed used than received</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-sm text-muted-foreground flex items-center gap-1.5">
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" /> High Variance Days
+                </div>
+                <div className={`text-2xl font-bold ${highVarCount > 0 ? "text-amber-600" : "text-muted-foreground"}`}>
+                  {highVarCount}
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">Days with more than 15% gap between intake and usage</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {milkChartData.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Intake vs Usage Over Time</CardTitle>
+                <CardDescription>Compare how much raw milk came in vs how much was claimed as used each day.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={milkChartData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip contentStyle={{ borderRadius: "8px", border: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }} />
+                      <Legend />
+                      <ReferenceLine y={0} stroke="#666" />
+                      <Bar dataKey="intake" name="Milk Received (L)" fill="hsl(142, 76%, 36%)" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="used" name="Milk Used (L)" fill="hsl(346, 87%, 43%)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Daily Raw Milk Reconciliation</CardTitle>
+              <CardDescription>
+                Each row shows one day: how much raw milk was received from suppliers vs how much was used in production.
+                A running stock total carries forward. Red rows mean someone claimed to use more milk than was actually received.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Received (L)</TableHead>
+                    <TableHead className="text-right">Used in Production (L)</TableHead>
+                    <TableHead className="text-right">Difference</TableHead>
+                    <TableHead className="text-right">Running Stock (L)</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {milkBalance.map((row) => (
+                    <TableRow
+                      key={row.date}
+                      className={row.flag === "OVER_USE" ? "bg-red-50/50" : row.flag === "HIGH_VARIANCE" ? "bg-amber-50/50" : ""}
+                      data-testid={`row-milk-balance-${row.date}`}
+                    >
+                      <TableCell className="font-medium">{row.date}</TableCell>
+                      <TableCell className="text-right font-mono">{row.intake.toFixed(1)}</TableCell>
+                      <TableCell className="text-right font-mono">{row.used.toFixed(1)}</TableCell>
+                      <TableCell className="text-right">
+                        <span className={`font-mono font-medium ${row.difference < 0 ? "text-red-600" : row.difference > 0 ? "text-emerald-600" : ""}`}>
+                          {row.difference > 0 ? "+" : ""}{row.difference.toFixed(1)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <span className={`font-mono font-medium ${row.runningStock < 0 ? "text-red-600" : "text-emerald-600"}`}>
+                          {row.runningStock > 0 ? "+" : ""}{row.runningStock.toFixed(1)}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5">
+                          {flagIcon(row.flag)}
+                          <span className="text-xs text-muted-foreground">{flagLabel(row.flag)}</span>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {milkBalance.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        No intake or production data recorded yet. Start by recording milk deliveries on the Intake page.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="balance" className="space-y-4">
           <Card>
