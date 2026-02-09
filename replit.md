@@ -50,11 +50,21 @@ Preferred communication style: Simple, everyday language.
 - **formulas** — id, name, type (CONVERSION | BLEND), outputProductId, inputBasis, active, version
 - **conversionFormulas** — formulaId, inputProductId, ratioNumerator, ratioDenominator
 - **blendComponents** — formulaId, componentProductId, fraction
-- **dailyIntakes** — date, supplierId, productId, qty, unitType
+- **dailyIntakes** — date, supplierId, productId, qty, deliveredQty (optional), acceptedQty (optional), unitType
 - **productionBatches** / **productionLineItems** — batch tracking with operation types (CONVERT, BLEND)
-- **packouts** — date, productId, qty, unitType, packSizeLabel
+- **blendActualUsage** — lineItemId, componentProductId, expectedQty, actualQty (tracks per-component actual usage in BLEND operations, CASCADE delete on line item)
+- **packouts** — date, productId, qty, unitType, packSizeLabel, sourceProductId (optional), sourceQtyUsed (optional)
 - **events** — immutable audit ledger (actorUserId, entityType, entityId, action, fieldName, oldValue, newValue)
 - **changeRequests** — edit approval workflow (PENDING, APPROVED, REJECTED status)
+
+### Loss Breakdown System
+Four loss categories tracked through the production process:
+- **A. Receiving Loss** — delivered vs accepted quantity at intake (from dailyIntakes.deliveredQty/acceptedQty)
+- **B. Filling/Process Loss** — source material used vs packed output (from packouts.sourceQtyUsed vs qty)
+- **C. Draining Loss** — input vs output in CONVERSION operations (from productionLineItems)
+- **D. Packing/Mixing Loss** — expected vs actual component usage in BLEND operations (from blendActualUsage)
+- API endpoint: `/api/reports/loss-breakdown` with dateFrom/dateTo query params
+- Frontend page: `/loss-breakdown` (mobile-first collapsible card design)
 
 ### Formula Engine
 Two configurable formula types, both managed through admin UI:
