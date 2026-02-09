@@ -13,7 +13,7 @@ import { Plus, Search, Beaker, Link2, Link2Off } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
-type Product = { id: number; name: string; category: string; unitType: string; isIntermediate: boolean; active: boolean };
+type Product = { id: number; name: string; category: string; unitType: string; isIntermediate: boolean; active: boolean; packSizeQty: string | null; packSizeUnit: string | null; packSizeLabel: string | null };
 type FormulaWithDetails = {
   id: number; name: string; type: "CONVERSION" | "BLEND"; outputProductId: number; active: boolean; version: number;
   conversion?: { inputProductId: number; ratioNumerator: string; ratioDenominator: string };
@@ -62,7 +62,7 @@ export default function Products() {
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [formData, setFormData] = useState({ name: "", category: "OTHER", unitType: "UNIT", active: true });
+  const [formData, setFormData] = useState({ name: "", category: "OTHER", unitType: "UNIT", active: true, packSizeQty: "", packSizeUnit: "LITER", packSizeLabel: "" });
 
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
   const { data: formulas = [] } = useQuery<FormulaWithDetails[]>({ queryKey: ["/api/formulas"] });
@@ -134,22 +134,26 @@ export default function Products() {
 
   const handleSave = () => {
     if (!formData.name) return;
+    const packSizeFields = formData.unitType === "UNIT" && formData.packSizeQty && formData.packSizeLabel
+      ? { packSizeQty: formData.packSizeQty, packSizeUnit: formData.packSizeUnit, packSizeLabel: formData.packSizeLabel }
+      : { packSizeQty: null, packSizeUnit: null, packSizeLabel: null };
+    const payload = { name: formData.name, category: formData.category, unitType: formData.unitType, active: formData.active, ...packSizeFields };
     if (editingId) {
-      updateMutation.mutate({ id: editingId, data: formData });
+      updateMutation.mutate({ id: editingId, data: payload });
     } else {
-      createMutation.mutate(formData);
+      createMutation.mutate(payload);
     }
   };
 
   const handleEdit = (product: Product) => {
     setEditingId(product.id);
-    setFormData({ name: product.name, category: product.category, unitType: product.unitType, active: product.active });
+    setFormData({ name: product.name, category: product.category, unitType: product.unitType, active: product.active, packSizeQty: product.packSizeQty || "", packSizeUnit: product.packSizeUnit || "LITER", packSizeLabel: product.packSizeLabel || "" });
     setIsDialogOpen(true);
   };
 
   const resetForm = () => {
     setEditingId(null);
-    setFormData({ name: "", category: "OTHER", unitType: "UNIT", active: true });
+    setFormData({ name: "", category: "OTHER", unitType: "UNIT", active: true, packSizeQty: "", packSizeUnit: "LITER", packSizeLabel: "" });
   };
 
   const getProductName = (id: number) => products.find(p => p.id === id)?.name || `#${id}`;
@@ -191,6 +195,7 @@ export default function Products() {
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Unit</TableHead>
+              <TableHead>Pack Size</TableHead>
               <TableHead>Formula</TableHead>
               <TableHead>Usage</TableHead>
               <TableHead>Status</TableHead>
@@ -212,6 +217,13 @@ export default function Products() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm uppercase">{product.unitType}</TableCell>
+                  <TableCell className="text-sm">
+                    {product.packSizeLabel ? (
+                      <span>{product.packSizeLabel}</span>
+                    ) : (
+                      <span className="text-muted-foreground/50">—</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     {hasFormula ? (
                       <Tooltip>
@@ -260,7 +272,7 @@ export default function Products() {
             })}
             {filteredProducts.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   {searchTerm || categoryFilter !== "ALL" ? "No products match your filters." : "No products yet."}
                 </TableCell>
               </TableRow>
@@ -310,6 +322,30 @@ export default function Products() {
               <Label className="text-right">Active</Label>
               <Switch checked={formData.active} onCheckedChange={(c) => setFormData({ ...formData, active: c })} className="col-span-3" data-testid="switch-active" />
             </div>
+
+            {formData.unitType === "UNIT" && (
+              <div className="border rounded-md p-4 space-y-4">
+                <Label className="text-sm font-medium">Pack Size</Label>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label className="text-right">Qty</Label>
+                  <Input type="number" step="0.001" value={formData.packSizeQty} onChange={(e) => setFormData({ ...formData, packSizeQty: e.target.value })} className="col-span-3" data-testid="input-pack-size-qty" />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label className="text-right">Unit</Label>
+                  <Select value={formData.packSizeUnit} onValueChange={(val) => setFormData({ ...formData, packSizeUnit: val })}>
+                    <SelectTrigger className="col-span-3" data-testid="select-pack-size-unit"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="LITER">Liter</SelectItem>
+                      <SelectItem value="KILOGRAM">Kilogram</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label className="text-right">Label</Label>
+                  <Input value={formData.packSizeLabel} onChange={(e) => setFormData({ ...formData, packSizeLabel: e.target.value })} className="col-span-3" data-testid="input-pack-size-label" />
+                </div>
+              </div>
+            )}
 
             {editingId && (
               <div className="border-t pt-4 mt-2">

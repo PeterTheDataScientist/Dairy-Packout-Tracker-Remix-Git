@@ -1006,5 +1006,155 @@ export async function registerRoutes(
     });
   });
 
+  // --- RUNNING STOCK REPORT ---
+  app.get("/api/reports/running-stock", requireAdmin, async (req, res) => {
+    const { dateFrom, dateTo } = req.query;
+
+    const allProducts = await storage.getProducts();
+    const rawMilkProducts = allProducts.filter(p => p.category === "RAW_MILK");
+    const yogurtBaseProducts = allProducts.filter(p => p.name.toUpperCase().includes("YOGURT BASE"));
+    const rawMilkIds = new Set(rawMilkProducts.map(p => p.id));
+    const yogurtBaseIds = new Set(yogurtBaseProducts.map(p => p.id));
+
+    const allIntakes = await storage.getDailyIntakes(dateFrom as string, dateTo as string);
+    const allLineItems = await storage.getAllLineItems(dateFrom as string, dateTo as string);
+    const allPackouts = await storage.getPackouts(dateFrom as string, dateTo as string);
+
+    const rawMilkDateSet = new Set<string>();
+    allIntakes.filter(i => rawMilkIds.has(i.productId)).forEach(i => rawMilkDateSet.add(i.date));
+    allLineItems.filter(li => li.inputProductId && rawMilkIds.has(li.inputProductId)).forEach(li => rawMilkDateSet.add(li.batchDate));
+    const rawMilkDates = Array.from(rawMilkDateSet).sort();
+
+    let rawMilkRunningStock = 0;
+    const rawMilkRows = rawMilkDates.map(date => {
+      const received = allIntakes
+        .filter(i => i.date === date && rawMilkIds.has(i.productId))
+        .reduce((acc, i) => acc + parseFloat(i.qty), 0);
+      const usedInProduction = allLineItems
+        .filter(li => li.batchDate === date && li.inputProductId && rawMilkIds.has(li.inputProductId))
+        .reduce((acc, li) => acc + parseFloat(li.inputQty || "0"), 0);
+      const difference = received - usedInProduction;
+      rawMilkRunningStock += difference;
+      return {
+        date,
+        received: Math.round(received * 100) / 100,
+        usedInProduction: Math.round(usedInProduction * 100) / 100,
+        difference: Math.round(difference * 100) / 100,
+        runningStock: Math.round(rawMilkRunningStock * 100) / 100,
+      };
+    });
+
+    const yogurtBaseDateSet = new Set<string>();
+    allLineItems.filter(li => li.outputProductId && yogurtBaseIds.has(li.outputProductId)).forEach(li => yogurtBaseDateSet.add(li.batchDate));
+    allLineItems.filter(li => li.inputProductId && yogurtBaseIds.has(li.inputProductId)).forEach(li => yogurtBaseDateSet.add(li.batchDate));
+    allPackouts.filter(po => yogurtBaseIds.has(po.productId)).forEach(po => yogurtBaseDateSet.add(po.date));
+    const yogurtBaseDates = Array.from(yogurtBaseDateSet).sort();
+
+    let yogurtBaseRunningStock = 0;
+    const yogurtBaseRows = yogurtBaseDates.map(date => {
+      const produced = allLineItems
+        .filter(li => li.batchDate === date && li.outputProductId && yogurtBaseIds.has(li.outputProductId))
+        .reduce((acc, li) => acc + parseFloat(li.outputQty), 0);
+      const usedInProduction = allLineItems
+        .filter(li => li.batchDate === date && li.inputProductId && yogurtBaseIds.has(li.inputProductId))
+        .reduce((acc, li) => acc + parseFloat(li.inputQty || "0"), 0);
+      const packedOut = allPackouts
+        .filter(po => po.date === date && yogurtBaseIds.has(po.productId))
+        .reduce((acc, po) => acc + parseFloat(po.qty), 0);
+      const difference = produced - usedInProduction - packedOut;
+      yogurtBaseRunningStock += difference;
+      return {
+        date,
+        produced: Math.round(produced * 100) / 100,
+        usedInProduction: Math.round(usedInProduction * 100) / 100,
+        packedOut: Math.round(packedOut * 100) / 100,
+        difference: Math.round(difference * 100) / 100,
+        runningStock: Math.round(yogurtBaseRunningStock * 100) / 100,
+      };
+    });
+
+    res.json({
+      rawMilk: {
+        productIds: Array.from(rawMilkIds),
+        rows: rawMilkRows,
+      },
+      yogurtBase: {
+        productIds: Array.from(yogurtBaseIds),
+        rows: yogurtBaseRows,
+      },
+    });
+  });
+
+  // --- DAILY ALLOCATION REPORT ---
+  app.get("/api/reports/allocation", requireAdmin, async (req, res) => {
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ message: "date query parameter is required" });
+
+    const dateStr = date as string;
+    const allProducts = await storage.getProducts();
+    const productMap = new Map(allProducts.map(p => [p.id, p]));
+
+    const allLineItems = await storage.getAllLineItems(dateStr, dateStr);
+    const dayLineItems = allLineItems.filter(li => li.batchDate === dateStr);
+
+    const allIntakes = await storage.getDailyIntakes(dateStr, dateStr);
+    const rawMilkProducts = allProducts.filter(p => p.category === "RAW_MILK");
+    const rawMilkIds = new Set(rawMilkProducts.map(p => p.id));
+
+    const totalRawMilkReceived = allIntakes
+      .filter(i => i.date === dateStr && rawMilkIds.has(i.productId))
+      .reduce((acc, i) => acc + parseFloat(i.qty), 0);
+
+    const categoryBuckets = new Map<string, { totalInputUsed: number; lineItems: any[] }>();
+    for (const li of dayLineItems) {
+      const outputProduct = productMap.get(li.outputProductId);
+      if (!outputProduct) continue;
+      const category = outputProduct.category;
+      if (!categoryBuckets.has(category)) {
+        categoryBuckets.set(category, { totalInputUsed: 0, lineItems: [] });
+      }
+      const bucket = categoryBuckets.get(category)!;
+      const inputQty = parseFloat(li.inputQty || "0");
+      bucket.totalInputUsed += inputQty;
+      bucket.lineItems.push({
+        lineItemId: li.id,
+        outputProductName: outputProduct.name,
+        inputProductName: li.inputProductId ? (productMap.get(li.inputProductId)?.name || "") : "",
+        inputQty: Math.round(inputQty * 100) / 100,
+        outputQty: Math.round(parseFloat(li.outputQty) * 100) / 100,
+      });
+    }
+
+    const categoryLabels: Record<string, string> = {
+      RAW_MILK: "Raw Milk",
+      MILK: "Milk",
+      YOGURT: "Yogurt",
+      DTY: "DTY",
+      YOLAC: "Yolac",
+      PROBIOTIC: "Probiotic",
+      CREAM_CHEESE: "Cream Cheese",
+      FETA: "Feta",
+      SMOOTHY: "Smoothy",
+      FRESH_CREAM: "Fresh Cream",
+      DIP: "Dip",
+      HODZEKO: "Hodzeko",
+      CHEESE: "Cheese",
+      OTHER: "Other",
+    };
+
+    const allocations = Array.from(categoryBuckets.entries()).map(([category, bucket]) => ({
+      category,
+      categoryLabel: categoryLabels[category] || category,
+      totalInputUsed: Math.round(bucket.totalInputUsed * 100) / 100,
+      lineItems: bucket.lineItems,
+    }));
+
+    res.json({
+      date: dateStr,
+      totalRawMilkReceived: Math.round(totalRawMilkReceived * 100) / 100,
+      allocations,
+    });
+  });
+
   return httpServer;
 }
