@@ -23,7 +23,7 @@ Preferred communication style: Simple, everyday language.
 - **UI Components:** shadcn/ui (new-york style) built on Radix UI primitives with Tailwind CSS v4 (using `@tailwindcss/vite` plugin)
 - **Charts:** Recharts for variance and mass balance visualizations
 - **Auth Context:** Custom React context in `client/src/lib/auth.tsx` wrapping session-based auth
-- **Key Pages:** Login, Dashboard, Intake, Production, Packouts, Products (admin), Formulas (admin), Approvals (admin), Reports (admin), My History (data entry)
+- **Key Pages:** Login, Dashboard, Intake, Production, Packouts, Products (admin), Formulas (admin), Approvals (admin), Reports (admin), Running Stock (admin), Daily Allocation (admin), Loss Breakdown (admin), My History (data entry)
 - **Path aliases:** `@/` maps to `client/src/`, `@shared/` maps to `shared/`
 
 ### Backend Architecture
@@ -46,7 +46,7 @@ Preferred communication style: Simple, everyday language.
 ### Data Model (Key Tables)
 - **users** — id, name, email, passwordHash, role (ADMIN | DATA_ENTRY)
 - **suppliers** — id, name, active
-- **products** — id, name, category (enum: RAW_MILK, YOGURT, DTY, YOLAC, PROBIOTIC, CREAM_CHEESE, FETA, OTHER), unitType (LITER, KG, UNIT), isIntermediate, active
+- **products** — id, name, category (enum: RAW_MILK, MILK, YOGURT, DTY, YOLAC, PROBIOTIC, CREAM_CHEESE, FETA, SMOOTHY, FRESH_CREAM, DIP, HODZEKO, CHEESE, OTHER), unitType (LITER, KG, UNIT), isIntermediate, active, packSizeQty (decimal, nullable), packSizeUnit (enum: LITER, KILOGRAM, nullable), packSizeLabel (text, nullable)
 - **formulas** — id, name, type (CONVERSION | BLEND), outputProductId, inputBasis, active, version
 - **conversionFormulas** — formulaId, inputProductId, ratioNumerator, ratioDenominator
 - **blendComponents** — formulaId, componentProductId, fraction
@@ -65,6 +65,28 @@ Four loss categories tracked through the production process:
 - **D. Packing/Mixing Loss** — expected vs actual component usage in BLEND operations (from blendActualUsage)
 - API endpoint: `/api/reports/loss-breakdown` with dateFrom/dateTo query params
 - Frontend page: `/loss-breakdown` (mobile-first collapsible card design)
+
+### Running Stock Report
+Tracks daily running stock for two key material buckets:
+- **Raw Milk** — daily received (from intakes) vs used (from production line item inputs), cumulative running stock
+- **Yogurt Base** — daily produced (from line item outputs) vs used+packed (from line item inputs + packouts), cumulative running stock
+- API endpoint: `/api/reports/running-stock` with dateFrom/dateTo query params (admin only)
+- Frontend page: `/running-stock` with date range picker, charts, tables, CSV export
+
+### Daily Allocation Report
+Shows how raw milk was distributed across product categories on a given day:
+- Groups production line items by output product category
+- Shows total input used per category with drill-down to individual operations
+- API endpoint: `/api/reports/allocation?date=YYYY-MM-DD` (admin only)
+- Frontend page: `/allocation` with collapsible category cards, CSV export
+
+### Pack Size Tracking
+Products with unitType=UNIT have optional pack size fields:
+- `packSizeQty` — decimal volume/weight (e.g., 0.5 for 500ml)
+- `packSizeUnit` — LITER or KILOGRAM
+- `packSizeLabel` — human-readable label (e.g., "500ml", "1kg")
+- Backfilled from product names using regex pattern matching (78/78 products)
+- Editable in admin Products page
 
 ### Formula Engine
 Two configurable formula types, both managed through admin UI:
