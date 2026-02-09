@@ -14,6 +14,7 @@ import {
   events, type Event, type InsertEvent,
   changeRequests, type ChangeRequest, type InsertChangeRequest,
   blendActualUsage, type BlendActualUsage, type InsertBlendActualUsage,
+  yieldTolerances,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -60,6 +61,7 @@ export interface IStorage {
   getProductionBatches(dateFrom?: string, dateTo?: string): Promise<ProductionBatch[]>;
   getProductionBatch(id: number): Promise<ProductionBatch | undefined>;
   createProductionBatch(b: InsertProductionBatch): Promise<ProductionBatch>;
+  updateProductionBatch(id: number, updates: Partial<InsertProductionBatch>): Promise<ProductionBatch | undefined>;
 
   // Production Line Items
   getLineItemsByBatch(batchId: number): Promise<ProductionLineItem[]>;
@@ -71,7 +73,9 @@ export interface IStorage {
 
   // Blend Actual Usage
   getBlendActualUsageByLineItem(lineItemId: number): Promise<BlendActualUsage[]>;
+  getBlendActualUsageById(id: number): Promise<BlendActualUsage | undefined>;
   createBlendActualUsage(b: InsertBlendActualUsage): Promise<BlendActualUsage>;
+  updateBlendActualUsage(id: number, updates: Partial<InsertBlendActualUsage>): Promise<BlendActualUsage | undefined>;
   deleteBlendActualUsageByLineItem(lineItemId: number): Promise<void>;
 
   // Packouts
@@ -92,8 +96,13 @@ export interface IStorage {
 
   // Change Requests
   getChangeRequests(status?: string): Promise<ChangeRequest[]>;
+  getChangeRequest(id: number): Promise<ChangeRequest | undefined>;
   createChangeRequest(c: InsertChangeRequest): Promise<ChangeRequest>;
   updateChangeRequestStatus(id: number, status: "APPROVED" | "REJECTED", adminId: number, comment?: string): Promise<ChangeRequest | undefined>;
+
+  // Yield Tolerances
+  getYieldTolerance(id: number): Promise<typeof yieldTolerances.$inferSelect | undefined>;
+  updateYieldTolerance(id: number, updates: any): Promise<typeof yieldTolerances.$inferSelect | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -249,6 +258,11 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async updateProductionBatch(id: number, updates: Partial<InsertProductionBatch>) {
+    const [updated] = await db.update(productionBatches).set(updates).where(eq(productionBatches.id, id)).returning();
+    return updated;
+  }
+
   // Production Line Items
   async getLineItemsByBatch(batchId: number) {
     return db.select().from(productionLineItems).where(eq(productionLineItems.batchId, batchId));
@@ -331,6 +345,16 @@ export class DatabaseStorage implements IStorage {
     return created;
   }
 
+  async getBlendActualUsageById(id: number) {
+    const [row] = await db.select().from(blendActualUsage).where(eq(blendActualUsage.id, id));
+    return row;
+  }
+
+  async updateBlendActualUsage(id: number, updates: Partial<InsertBlendActualUsage>) {
+    const [updated] = await db.update(blendActualUsage).set(updates).where(eq(blendActualUsage.id, id)).returning();
+    return updated;
+  }
+
   async deleteBlendActualUsageByLineItem(lineItemId: number) {
     await db.delete(blendActualUsage).where(eq(blendActualUsage.lineItemId, lineItemId));
   }
@@ -392,6 +416,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Change Requests
+  async getChangeRequest(id: number) {
+    const [cr] = await db.select().from(changeRequests).where(eq(changeRequests.id, id));
+    return cr;
+  }
+
   async getChangeRequests(status?: string) {
     if (status) {
       return db.select().from(changeRequests)
@@ -413,6 +442,17 @@ export class DatabaseStorage implements IStorage {
       reviewedAt: new Date(),
       adminComment: comment || null,
     }).where(eq(changeRequests.id, id)).returning();
+    return updated;
+  }
+
+  // Yield Tolerances
+  async getYieldTolerance(id: number) {
+    const [row] = await db.select().from(yieldTolerances).where(eq(yieldTolerances.id, id));
+    return row;
+  }
+
+  async updateYieldTolerance(id: number, updates: any) {
+    const [updated] = await db.update(yieldTolerances).set(updates).where(eq(yieldTolerances.id, id)).returning();
     return updated;
   }
 }
