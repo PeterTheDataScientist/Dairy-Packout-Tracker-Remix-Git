@@ -1,0 +1,79 @@
+Implement 3 production-critical upgrades with minimal changes: 
+(#5) Pack sizes for UNIT products, (#6) running stock (RAW MILK + YOGURT BASE), and (#2) daily milk allocation view.
+
+CONSTRAINTS
+- Do not rewrite existing features (formulas, loss breakdown, approvals, events).
+- Keep mobile-friendly UI.
+- Any edits by DATA_ENTRY must still go through ChangeRequest (no direct DB updates).
+- No currency or pricing fields.
+
+A) PACK SIZE FIELDS (Product)
+1) Add fields to products:
+- packSizeQty DECIMAL(12,4) nullable
+- packSizeUnit enum [LITER, KILOGRAM] nullable
+- (optional) packSizeLabel string nullable (e.g., "1L", "500ml", "175g")
+2) Admin Products UI:
+- Add editable pack size fields.
+- Only show pack size inputs when product.unitType == UNIT.
+- Validate: packSizeQty > 0; packSizeUnit required when packSizeQty present.
+3) Backfill (seed or one-time script):
+- Infer pack sizes from product name patterns:
+  - "1 LTR" / "1L" => 1 LITER
+  - "2 LTR" / "2L" => 2 LITER
+  - "5 LTR" / "5L" => 5 LITER
+  - "500 ML" / "500ML" => 0.5 LITER
+  - "250ML" => 0.25 LITER
+  - "200ML" => 0.2 LITER
+  - "300ML" => 0.3 LITER
+  - "1kg" / "1KG" => 1 KILOGRAM
+  - "500g" => 0.5 KILOGRAM
+  - "175g" => 0.175 KILOGRAM
+  - "150G" => 0.15 KILOGRAM
+  - "440G" => 0.44 KILOGRAM
+  - "220G" => 0.22 KILOGRAM
+- Log any products that could not be inferred so admin can fill manually.
+
+B) RUNNING STOCK (RAW MILK + YOGURT BASE)
+Create a new report endpoint + UI tab that computes daily running balance (no stock table required):
+For each day (date):
+- openingStock
+- intakeAccepted (sum daily_intakes.acceptedQty for RAW MILK products; if acceptedQty null use qty)
+- producedIntoStock (e.g., conversion outputs for YOGURT BASE (BULK) etc.)
+- consumedFromStock (production inputs consuming RAW MILK / YOGURT BASE, and blend component actual usage when relevant)
+- packedOutEquivalent (convert UNIT packouts into bulk equivalents using packSizeQty/packSizeUnit when packout.sourceProductId is null, else use sourceQtyUsed)
+- closingStock = openingStock + intake + produced - consumed - packedOutEquivalent
+- variance flags using tolerances
+
+Minimum scope:
+- Track running stock for:
+  1) RAW MILK (aggregate across all raw milk products)
+  2) YOGURT BASE (BULK) as a separate tracked item
+Explain clearly in JSON the assumptions used.
+
+C) DAILY MILK ALLOCATION VIEW (aligned to Brandon flow)
+Add an Admin Reports tab "Allocation" for a selected day that breaks down:
+- Total RAW MILK intake (accepted)
+- Allocated to:
+  - Fresh Milk outputs (via production + packout equivalents)
+  - Yogurt Base produced (conversion output)
+  - Yolac produced
+  - Feta produced
+  - Any other raw-milk outputs (grouped)
+- Unallocated remainder (should be explainable by closing stock delta or data gaps)
+Provide drill-down lists per bucket (which line items/packouts contributed).
+
+D) UI
+- Add 2 tabs under Reports (Admin-only):
+  1) "Running Stock"
+  2) "Allocation"
+- Mobile-friendly: date picker, summary cards, expandable detail lists.
+- Add "Download CSV" buttons for these two tabs (simple CSV export endpoints are OK).
+
+E) TESTS / VERIFICATION (must show evidence)
+- Show migration/SQL changes for the new product fields.
+- Demonstrate at least 5 products got inferred pack sizes correctly.
+- Show one day of Running Stock JSON response with opening/closing and components.
+- Show Allocation JSON response with totals and drill-down arrays.
+- Confirm DATA_ENTRY cannot edit products directly; admin edits logged in events; DATA_ENTRY edits create ChangeRequests.
+
+IMPORTANT: Keep existing loss breakdown and approvals working. Do not introduce duplicate products or formulas.

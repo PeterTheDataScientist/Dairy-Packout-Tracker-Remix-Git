@@ -17,6 +17,7 @@ import { z } from "zod";
 
 export const roleEnum = pgEnum("role", ["ADMIN", "DATA_ENTRY"]);
 export const unitTypeEnum = pgEnum("unit_type", ["LITER", "KG", "UNIT"]);
+export const packSizeUnitEnum = pgEnum("pack_size_unit", ["LITER", "KILOGRAM"]);
 export const productCategoryEnum = pgEnum("product_category", [
   "RAW_MILK", "MILK", "YOGURT", "DTY", "YOLAC", "PROBIOTIC", "CREAM_CHEESE", "FETA", "SMOOTHY", "FRESH_CREAM", "DIP", "HODZEKO", "CHEESE", "OTHER",
 ]);
@@ -54,6 +55,9 @@ export const products = pgTable("products", {
   unitType: unitTypeEnum("unit_type").notNull(),
   isIntermediate: boolean("is_intermediate").notNull().default(false),
   active: boolean("active").notNull().default(true),
+  packSizeQty: decimal("pack_size_qty", { precision: 12, scale: 4 }),
+  packSizeUnit: packSizeUnitEnum("pack_size_unit"),
+  packSizeLabel: text("pack_size_label"),
 });
 
 export const insertProductSchema = createInsertSchema(products).omit({ id: true });
