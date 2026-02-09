@@ -654,5 +654,55 @@ export async function registerRoutes(
     res.json(varianceData);
   });
 
+  app.get("/api/reports/daily-milk-balance", requireAuth, async (req, res) => {
+    const allProducts = await storage.getProducts();
+    const rawMilkProducts = allProducts.filter(p => p.category === "RAW_MILK");
+    const rawMilkIds = new Set(rawMilkProducts.map(p => p.id));
+
+    const allIntakes = await storage.getDailyIntakes();
+    const allLineItems = await storage.getAllLineItems();
+
+    const rawIntakes = allIntakes.filter(i => rawMilkIds.has(i.productId));
+    const rawUsage = allLineItems.filter(li => li.inputProductId && rawMilkIds.has(li.inputProductId));
+
+    const dateSet = new Set<string>();
+    rawIntakes.forEach(i => dateSet.add(i.date));
+    rawUsage.forEach(li => dateSet.add(li.batchDate));
+
+    const dates = Array.from(dateSet).sort();
+
+    let runningStock = 0;
+    const rows = dates.map(date => {
+      const intake = rawIntakes
+        .filter(i => i.date === date)
+        .reduce((acc, i) => acc + parseFloat(i.qty), 0);
+
+      const used = rawUsage
+        .filter(li => li.batchDate === date)
+        .reduce((acc, li) => acc + parseFloat(li.inputQty || "0"), 0);
+
+      const produced = allLineItems
+        .filter(li => li.batchDate === date && li.outputProductId && rawMilkIds.has(li.inputProductId!))
+        .reduce((acc, li) => acc + parseFloat(li.outputQty), 0);
+
+      const difference = intake - used;
+      runningStock += difference;
+
+      const flag = used > intake ? "OVER_USE" : Math.abs(difference) > intake * 0.15 && intake > 0 ? "HIGH_VARIANCE" : "OK";
+
+      return {
+        date,
+        intake: Math.round(intake * 100) / 100,
+        used: Math.round(used * 100) / 100,
+        produced: Math.round(produced * 100) / 100,
+        difference: Math.round(difference * 100) / 100,
+        runningStock: Math.round(runningStock * 100) / 100,
+        flag,
+      };
+    });
+
+    res.json(rows.reverse());
+  });
+
   return httpServer;
 }
