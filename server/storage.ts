@@ -96,6 +96,7 @@ export interface IStorage {
 
   // Change Requests
   getChangeRequests(status?: string): Promise<ChangeRequest[]>;
+  getChangeRequestsByUser(userId: number, status?: string): Promise<ChangeRequest[]>;
   getChangeRequest(id: number): Promise<ChangeRequest | undefined>;
   createChangeRequest(c: InsertChangeRequest): Promise<ChangeRequest>;
   updateChangeRequestStatus(id: number, status: "APPROVED" | "REJECTED", adminId: number, comment?: string): Promise<ChangeRequest | undefined>;
@@ -428,6 +429,16 @@ export class DatabaseStorage implements IStorage {
         .orderBy(desc(changeRequests.requestedAt));
     }
     return db.select().from(changeRequests).orderBy(desc(changeRequests.requestedAt));
+  }
+
+  async getChangeRequestsByUser(userId: number, status?: string) {
+    const conditions = [eq(changeRequests.requestedByUserId, userId)];
+    if (status) {
+      conditions.push(eq(changeRequests.status, status as any));
+    }
+    return db.select().from(changeRequests)
+      .where(and(...conditions))
+      .orderBy(desc(changeRequests.requestedAt));
   }
 
   async createChangeRequest(c: InsertChangeRequest) {

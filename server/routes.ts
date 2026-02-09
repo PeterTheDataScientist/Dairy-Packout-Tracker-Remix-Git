@@ -552,6 +552,12 @@ export async function registerRoutes(
     res.json(list);
   });
 
+  app.get("/api/my-change-requests", requireAuth, async (req, res) => {
+    const { status } = req.query;
+    const list = await storage.getChangeRequestsByUser(req.user!.id, status as string);
+    res.json(list);
+  });
+
   app.post("/api/change-requests", requireAuth, async (req, res) => {
     const { entityType, entityId, fieldName, proposedValue, currentValue, reason } = req.body;
     if (!reason || !reason.trim()) {
