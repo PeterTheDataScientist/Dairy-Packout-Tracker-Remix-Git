@@ -390,6 +390,31 @@ export async function registerRoutes(
     res.json({ success: true });
   });
 
+  // --- BLEND ACTUAL USAGE ---
+  app.get("/api/production/line-items/:id/blend-usage", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const usage = await storage.getBlendActualUsageByLineItem(id);
+    res.json(usage);
+  });
+
+  app.post("/api/production/line-items/:id/blend-usage", requireAuth, async (req, res) => {
+    const lineItemId = parseInt(req.params.id);
+    const { components } = req.body;
+    if (!Array.isArray(components)) return res.status(400).json({ error: "components array required" });
+    await storage.deleteBlendActualUsageByLineItem(lineItemId);
+    const results = [];
+    for (const comp of components) {
+      const created = await storage.createBlendActualUsage({
+        lineItemId,
+        componentProductId: comp.componentProductId,
+        expectedQty: comp.expectedQty || null,
+        actualQty: comp.actualQty,
+      });
+      results.push(created);
+    }
+    res.json(results);
+  });
+
   // --- PACKOUTS ---
   app.get("/api/packouts", requireAuth, async (req, res) => {
     const { dateFrom, dateTo } = req.query;
@@ -424,12 +449,14 @@ export async function registerRoutes(
     if (existing.createdByUserId !== req.user!.id && req.user!.role !== "ADMIN") {
       return res.status(403).json({ error: "You can only edit your own records" });
     }
-    const { qty, productId, date, packSizeLabel } = req.body;
+    const { qty, productId, date, packSizeLabel, sourceProductId, sourceQtyUsed } = req.body;
     const updates: any = {};
     if (qty !== undefined) updates.qty = qty;
     if (productId !== undefined) updates.productId = productId;
     if (date !== undefined) updates.date = date;
     if (packSizeLabel !== undefined) updates.packSizeLabel = packSizeLabel;
+    if (sourceProductId !== undefined) updates.sourceProductId = sourceProductId;
+    if (sourceQtyUsed !== undefined) updates.sourceQtyUsed = sourceQtyUsed;
     const updated = await storage.updatePackout(id, updates);
     await storage.createEvent({
       actorUserId: req.user!.id,
@@ -477,12 +504,14 @@ export async function registerRoutes(
     if (existing.createdByUserId !== req.user!.id && req.user!.role !== "ADMIN") {
       return res.status(403).json({ error: "You can only edit your own records" });
     }
-    const { qty, productId, supplierId, date } = req.body;
+    const { qty, productId, supplierId, date, deliveredQty, acceptedQty } = req.body;
     const updates: any = {};
     if (qty !== undefined) updates.qty = qty;
     if (productId !== undefined) updates.productId = productId;
     if (supplierId !== undefined) updates.supplierId = supplierId;
     if (date !== undefined) updates.date = date;
+    if (deliveredQty !== undefined) updates.deliveredQty = deliveredQty;
+    if (acceptedQty !== undefined) updates.acceptedQty = acceptedQty;
     const updated = await storage.updateDailyIntake(id, updates);
     await storage.createEvent({
       actorUserId: req.user!.id,
@@ -702,6 +731,142 @@ export async function registerRoutes(
     });
 
     res.json(rows.reverse());
+  });
+
+  app.get("/api/reports/loss-breakdown", requireAuth, async (req, res) => {
+    const { dateFrom, dateTo } = req.query;
+    const allProducts = await storage.getProducts();
+    const productMap = new Map(allProducts.map(p => [p.id, p]));
+
+    const intakes = await storage.getDailyIntakes(dateFrom as string, dateTo as string);
+    const lineItems = await storage.getAllLineItems(dateFrom as string, dateTo as string);
+    const allPackouts = await storage.getPackouts(dateFrom as string, dateTo as string);
+    const allFormulas = await storage.getFormulas();
+
+    const receivingLosses: any[] = [];
+    for (const intake of intakes) {
+      const delivered = intake.deliveredQty ? parseFloat(intake.deliveredQty) : null;
+      const accepted = intake.acceptedQty ? parseFloat(intake.acceptedQty) : parseFloat(intake.qty);
+      if (delivered !== null && delivered > 0) {
+        const loss = delivered - accepted;
+        if (Math.abs(loss) > 0.001) {
+          receivingLosses.push({
+            id: intake.id,
+            date: intake.date,
+            productId: intake.productId,
+            productName: productMap.get(intake.productId)?.name || "",
+            delivered,
+            accepted,
+            loss,
+            lossPercent: (loss / delivered) * 100,
+          });
+        }
+      }
+    }
+
+    const fillingProcessLosses: any[] = [];
+    for (const po of allPackouts) {
+      if (po.sourceProductId && po.sourceQtyUsed) {
+        const sourceUsed = parseFloat(po.sourceQtyUsed);
+        const packed = parseFloat(po.qty);
+        const loss = sourceUsed - packed;
+        if (Math.abs(loss) > 0.001) {
+          fillingProcessLosses.push({
+            id: po.id,
+            date: po.date,
+            productId: po.productId,
+            productName: productMap.get(po.productId)?.name || "",
+            sourceProductId: po.sourceProductId,
+            sourceProductName: productMap.get(po.sourceProductId)?.name || "",
+            sourceUsed,
+            packed,
+            loss,
+            lossPercent: sourceUsed > 0 ? (loss / sourceUsed) * 100 : 0,
+          });
+        }
+      }
+    }
+
+    const drainingLosses: any[] = [];
+    for (const li of lineItems) {
+      if (li.operationType === "CONVERT" && li.inputQty && li.formulaId) {
+        const formula = allFormulas.find(f => f.id === li.formulaId);
+        if (formula?.type === "CONVERSION") {
+          const conv = await storage.getConversionByFormulaId(formula.id);
+          if (conv) {
+            const ratio = parseFloat(conv.ratioNumerator) / parseFloat(conv.ratioDenominator);
+            const inputQty = parseFloat(li.inputQty);
+            const outputQty = parseFloat(li.outputQty);
+            const expectedOutput = inputQty / ratio;
+            const loss = inputQty - outputQty;
+            if (Math.abs(loss) > 0.001) {
+              drainingLosses.push({
+                id: li.id,
+                date: li.batchDate,
+                batchCode: li.batchCode,
+                inputProductId: li.inputProductId,
+                inputProductName: productMap.get(li.inputProductId!)?.name || "",
+                outputProductId: li.outputProductId,
+                outputProductName: productMap.get(li.outputProductId!)?.name || "",
+                inputQty,
+                outputQty,
+                expectedOutput,
+                loss,
+                lossPercent: inputQty > 0 ? (loss / inputQty) * 100 : 0,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    const packingMixingLosses: any[] = [];
+    for (const li of lineItems) {
+      if (li.operationType === "BLEND" && li.formulaId) {
+        const usage = await storage.getBlendActualUsageByLineItem(li.id);
+        if (usage.length > 0) {
+          const totalExpected = usage.reduce((s, u) => s + (u.expectedQty ? parseFloat(u.expectedQty) : 0), 0);
+          const totalActual = usage.reduce((s, u) => s + parseFloat(u.actualQty), 0);
+          const loss = totalActual - totalExpected;
+          const components = usage.map(u => ({
+            componentProductId: u.componentProductId,
+            componentName: productMap.get(u.componentProductId)?.name || "",
+            expected: u.expectedQty ? parseFloat(u.expectedQty) : 0,
+            actual: parseFloat(u.actualQty),
+            variance: parseFloat(u.actualQty) - (u.expectedQty ? parseFloat(u.expectedQty) : 0),
+          }));
+          packingMixingLosses.push({
+            id: li.id,
+            date: li.batchDate,
+            batchCode: li.batchCode,
+            outputProductId: li.outputProductId,
+            outputProductName: productMap.get(li.outputProductId!)?.name || "",
+            outputQty: parseFloat(li.outputQty),
+            totalExpected,
+            totalActual,
+            loss,
+            lossPercent: totalExpected > 0 ? (loss / totalExpected) * 100 : 0,
+            components,
+          });
+        }
+      }
+    }
+
+    const summary = {
+      receiving: receivingLosses.reduce((s, l) => s + l.loss, 0),
+      fillingProcess: fillingProcessLosses.reduce((s, l) => s + l.loss, 0),
+      draining: drainingLosses.reduce((s, l) => s + l.loss, 0),
+      packingMixing: packingMixingLosses.reduce((s, l) => s + l.loss, 0),
+    };
+
+    res.json({
+      summary,
+      totalLoss: summary.receiving + summary.fillingProcess + summary.draining + summary.packingMixing,
+      receiving: receivingLosses,
+      fillingProcess: fillingProcessLosses,
+      draining: drainingLosses,
+      packingMixing: packingMixingLosses,
+    });
   });
 
   return httpServer;

@@ -13,6 +13,7 @@ import {
   packouts, type Packout, type InsertPackout,
   events, type Event, type InsertEvent,
   changeRequests, type ChangeRequest, type InsertChangeRequest,
+  blendActualUsage, type BlendActualUsage, type InsertBlendActualUsage,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -67,6 +68,11 @@ export interface IStorage {
   createLineItem(l: InsertProductionLineItem): Promise<ProductionLineItem>;
   updateLineItem(id: number, updates: Partial<InsertProductionLineItem>): Promise<ProductionLineItem | undefined>;
   deleteLineItem(id: number): Promise<boolean>;
+
+  // Blend Actual Usage
+  getBlendActualUsageByLineItem(lineItemId: number): Promise<BlendActualUsage[]>;
+  createBlendActualUsage(b: InsertBlendActualUsage): Promise<BlendActualUsage>;
+  deleteBlendActualUsageByLineItem(lineItemId: number): Promise<void>;
 
   // Packouts
   getPackouts(dateFrom?: string, dateTo?: string): Promise<Packout[]>;
@@ -313,6 +319,20 @@ export class DatabaseStorage implements IStorage {
   async deleteLineItem(id: number) {
     const result = await db.delete(productionLineItems).where(eq(productionLineItems.id, id));
     return true;
+  }
+
+  // Blend Actual Usage
+  async getBlendActualUsageByLineItem(lineItemId: number) {
+    return db.select().from(blendActualUsage).where(eq(blendActualUsage.lineItemId, lineItemId));
+  }
+
+  async createBlendActualUsage(b: InsertBlendActualUsage) {
+    const [created] = await db.insert(blendActualUsage).values(b).returning();
+    return created;
+  }
+
+  async deleteBlendActualUsageByLineItem(lineItemId: number) {
+    await db.delete(blendActualUsage).where(eq(blendActualUsage.lineItemId, lineItemId));
   }
 
   // Packouts
