@@ -333,6 +333,18 @@ export default function Production() {
                   </div>
                 </div>
 
+                {matchedFormula && matchedFormula.type === "CONVERSION" && matchedFormula.conversion &&
+                  getProductUnit(matchedFormula.conversion.inputProductId) !== selectedProduct.unitType &&
+                  getProductUnit(matchedFormula.conversion.inputProductId) && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800" data-testid="warning-unit-mismatch">
+                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span>
+                      <strong>Unit mismatch:</strong> Input is in {unitLabel(getProductUnit(matchedFormula.conversion.inputProductId))} but output is in {unitLabel(selectedProduct.unitType)}.
+                      The formula ratio may account for this conversion, but double-check the quantities.
+                    </span>
+                  </div>
+                )}
+
                 {matchedFormula && matchedFormula.type === "CONVERSION" && matchedFormula.conversion && (
                   <Card className="bg-muted/30 border-dashed">
                     <CardContent className="p-4 space-y-4">
