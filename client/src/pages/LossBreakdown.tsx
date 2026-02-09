@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { ChevronDown, ChevronRight, Droplets, Package, Beaker, FlaskConical, TrendingDown } from "lucide-react";
 import { format, subDays } from "date-fns";
+import { useAuth } from "@/lib/auth";
+import { useLocation } from "wouter";
 
 type LossBreakdownData = {
   summary: { receiving: number; fillingProcess: number; draining: number; packingMixing: number };
@@ -43,6 +45,14 @@ const categories = [
 ];
 
 export default function LossBreakdown() {
+  const { user } = useAuth();
+  const [, navigate] = useLocation();
+
+  if (user?.role !== "ADMIN") {
+    navigate("/");
+    return null;
+  }
+
   const [dateFrom, setDateFrom] = useState(format(subDays(new Date(), 30), "yyyy-MM-dd"));
   const [dateTo, setDateTo] = useState(format(new Date(), "yyyy-MM-dd"));
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});

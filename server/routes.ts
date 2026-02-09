@@ -733,7 +733,7 @@ export async function registerRoutes(
     res.json(rows.reverse());
   });
 
-  app.get("/api/reports/loss-breakdown", requireAuth, async (req, res) => {
+  app.get("/api/reports/loss-breakdown", requireAdmin, async (req, res) => {
     const { dateFrom, dateTo } = req.query;
     const allProducts = await storage.getProducts();
     const productMap = new Map(allProducts.map(p => [p.id, p]));
