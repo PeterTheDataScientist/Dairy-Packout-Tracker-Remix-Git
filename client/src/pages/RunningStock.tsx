@@ -27,9 +27,20 @@ type YogurtBaseRow = {
   runningStock: number;
 };
 
+type DataGap = {
+  lineItemId: number;
+  batchCode: string;
+  batchDate: string;
+  outputProductName: string;
+  inputProductName: string;
+  outputQty: string;
+  issue: string;
+};
+
 type RunningStockData = {
   rawMilk: { productIds: number[]; rows: RawMilkRow[] };
   yogurtBase: { productIds: number[]; rows: YogurtBaseRow[] };
+  dataGaps?: DataGap[];
 };
 
 function downloadCSV(data: any[], filename: string) {
@@ -324,6 +335,50 @@ export default function RunningStock() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {(data?.dataGaps?.length ?? 0) > 0 && (
+        <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-800" data-testid="panel-data-gaps">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2 text-amber-800 dark:text-amber-300">
+              <AlertTriangle className="h-4 w-4" />
+              Data Gaps ({data!.dataGaps!.length})
+            </CardTitle>
+            <CardDescription className="text-amber-700 dark:text-amber-400">
+              These conversion operations are missing input quantities, which may cause inaccurate stock calculations.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Batch Code</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Output Product</TableHead>
+                  <TableHead>Input Product</TableHead>
+                  <TableHead className="text-right">Output Qty</TableHead>
+                  <TableHead>Issue</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data!.dataGaps!.map(gap => (
+                  <TableRow key={gap.lineItemId} data-testid={`row-data-gap-${gap.lineItemId}`}>
+                    <TableCell className="font-mono text-xs">{gap.batchCode}</TableCell>
+                    <TableCell>{gap.batchDate}</TableCell>
+                    <TableCell className="font-medium">{gap.outputProductName}</TableCell>
+                    <TableCell className="text-muted-foreground">{gap.inputProductName}</TableCell>
+                    <TableCell className="text-right font-mono">{parseFloat(gap.outputQty).toFixed(1)}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-300 text-xs">
+                        Missing input qty
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

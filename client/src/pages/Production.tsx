@@ -15,7 +15,7 @@ import { Plus, ArrowRight, AlertTriangle, CheckCircle2, Beaker, Info, Pencil, Tr
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
-type Product = { id: number; name: string; unitType: string; category: string; active: boolean; isIntermediate: boolean };
+type Product = { id: number; name: string; unitType: string; category: string; active: boolean; isIntermediate: boolean; packSizeQty: string | null; packSizeUnit: string | null; packSizeLabel: string | null };
 type FormulaWithDetails = {
   id: number; name: string; type: "CONVERSION" | "BLEND"; outputProductId: number; active: boolean;
   conversion?: { inputProductId: number; ratioNumerator: string; ratioDenominator: string };
@@ -187,10 +187,18 @@ export default function Production() {
           await saveBlendUsageMutation.mutateAsync({ lineItemId: lineItem.id, components });
         }
 
-        toast({
-          title: "Batch Recorded",
-          description: `${selectedProduct.name} — ${parseFloat(outputQty).toLocaleString()} ${unitShort(selectedProduct.unitType)} logged.`,
-        });
+        if (lineItem.inputQtyAutoFilled) {
+          toast({
+            title: "Input Auto-Filled",
+            description: `No input quantity was entered. The system calculated ${parseFloat(lineItem.inputQty).toFixed(1)} L from the formula. You can edit this later if needed.`,
+            variant: "default",
+          });
+        } else {
+          toast({
+            title: "Batch Recorded",
+            description: `${selectedProduct.name} — ${parseFloat(outputQty).toLocaleString()} ${unitShort(selectedProduct.unitType)} logged.`,
+          });
+        }
       }
       setIsDialogOpen(false);
       resetForm();
@@ -350,6 +358,13 @@ export default function Production() {
                       {unitLabel(selectedProduct.unitType)}
                     </span>
                   </div>
+                  {selectedProduct.unitType === "UNIT" && selectedProduct.packSizeQty && outputQty && (
+                    <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1" data-testid="text-output-equivalent">
+                      <Info className="h-3 w-3" />
+                      Output equivalent: {parseFloat(outputQty)} units = {(parseFloat(outputQty) * parseFloat(selectedProduct.packSizeQty)).toFixed(1)} {selectedProduct.packSizeUnit === "KILOGRAM" ? "kg" : "L"}
+                      {selectedProduct.packSizeLabel && <span className="text-muted-foreground">({selectedProduct.packSizeLabel} per unit)</span>}
+                    </p>
+                  )}
                 </div>
 
                 {matchedFormula && matchedFormula.type === "CONVERSION" && matchedFormula.conversion &&
