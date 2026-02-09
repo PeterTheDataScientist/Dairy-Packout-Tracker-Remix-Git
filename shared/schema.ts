@@ -113,6 +113,8 @@ export const dailyIntakes = pgTable("daily_intakes", {
   supplierId: integer("supplier_id").references(() => suppliers.id),
   productId: integer("product_id").notNull().references(() => products.id),
   qty: decimal("qty", { precision: 12, scale: 4 }).notNull(),
+  deliveredQty: decimal("delivered_qty", { precision: 12, scale: 4 }),
+  acceptedQty: decimal("accepted_qty", { precision: 12, scale: 4 }),
   unitType: unitTypeEnum("unit_type").notNull(),
   createdByUserId: integer("created_by_user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -160,6 +162,8 @@ export const packouts = pgTable("packouts", {
   qty: decimal("qty", { precision: 12, scale: 4 }).notNull(),
   unitType: unitTypeEnum("unit_type").notNull(),
   packSizeLabel: text("pack_size_label"),
+  sourceProductId: integer("source_product_id").references(() => products.id),
+  sourceQtyUsed: decimal("source_qty_used", { precision: 12, scale: 4 }),
   createdByUserId: integer("created_by_user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -167,6 +171,18 @@ export const packouts = pgTable("packouts", {
 export const insertPackoutSchema = createInsertSchema(packouts).omit({ id: true, createdAt: true });
 export type InsertPackout = z.infer<typeof insertPackoutSchema>;
 export type Packout = typeof packouts.$inferSelect;
+
+export const blendActualUsage = pgTable("blend_actual_usage", {
+  id: serial("id").primaryKey(),
+  lineItemId: integer("line_item_id").notNull().references(() => productionLineItems.id, { onDelete: "cascade" }),
+  componentProductId: integer("component_product_id").notNull().references(() => products.id),
+  expectedQty: decimal("expected_qty", { precision: 12, scale: 4 }),
+  actualQty: decimal("actual_qty", { precision: 12, scale: 4 }).notNull(),
+});
+
+export const insertBlendActualUsageSchema = createInsertSchema(blendActualUsage).omit({ id: true });
+export type InsertBlendActualUsage = z.infer<typeof insertBlendActualUsageSchema>;
+export type BlendActualUsage = typeof blendActualUsage.$inferSelect;
 
 export const events = pgTable("events", {
   id: serial("id").primaryKey(),
