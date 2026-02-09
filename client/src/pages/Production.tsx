@@ -34,6 +34,7 @@ export default function Production() {
   const [actualInputQty, setActualInputQty] = useState("");
   const [batchDate, setBatchDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [batchCode, setBatchCode] = useState(`B-${format(new Date(), "yyyyMMdd")}-${Math.floor(Math.random() * 1000)}`);
+  const [blendActuals, setBlendActuals] = useState<Record<number, string>>({});
 
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
   const { data: formulas = [] } = useQuery<FormulaWithDetails[]>({ queryKey: ["/api/formulas"] });
@@ -135,6 +136,13 @@ export default function Production() {
     },
   });
 
+  const saveBlendUsageMutation = useMutation({
+    mutationFn: async ({ lineItemId, components }: { lineItemId: number; components: any[] }) => {
+      const res = await apiRequest("POST", `/api/production/line-items/${lineItemId}/blend-usage`, { components });
+      return res.json();
+    },
+  });
+
   const handleSave = async () => {
     if (!selectedProduct || !outputQty) return;
     const operationType = matchedFormula?.type === "BLEND" ? "BLEND" : "CONVERT";
@@ -159,7 +167,7 @@ export default function Production() {
           batchCode,
           notes: null,
         });
-        await createLineItemMutation.mutateAsync({
+        const lineItem = await createLineItemMutation.mutateAsync({
           batchId: batch.id,
           operationType,
           formulaId: matchedFormula?.id || null,
@@ -169,6 +177,16 @@ export default function Production() {
           outputQty,
           unitType: selectedProduct.unitType,
         });
+
+        if (operationType === "BLEND" && Object.keys(blendActuals).length > 0 && calculations?.components) {
+          const components = calculations.components.map((c: any) => ({
+            componentProductId: c.componentProductId,
+            expectedQty: String(c.expectedQty),
+            actualQty: blendActuals[c.componentProductId] || String(c.expectedQty),
+          }));
+          await saveBlendUsageMutation.mutateAsync({ lineItemId: lineItem.id, components });
+        }
+
         toast({
           title: "Batch Recorded",
           description: `${selectedProduct.name} — ${parseFloat(outputQty).toLocaleString()} ${unitShort(selectedProduct.unitType)} logged.`,
@@ -209,6 +227,7 @@ export default function Production() {
     setSelectedProductId("");
     setOutputQty("");
     setActualInputQty("");
+    setBlendActuals({});
   };
 
   return (
@@ -407,12 +426,21 @@ export default function Production() {
                 {matchedFormula && matchedFormula.type === "BLEND" && calculations?.components && (
                   <Card className="bg-muted/30 border-dashed">
                     <CardContent className="p-4 space-y-3">
-                      <Label className="text-xs text-muted-foreground font-medium">Ingredients needed:</Label>
+                      <Label className="text-xs text-muted-foreground font-medium">Blend Components:</Label>
                       <div className="grid gap-2 text-sm">
                         {calculations.components.map((c: any, i: number) => (
-                          <div key={i} className="flex justify-between items-center bg-background p-2 rounded border">
-                            <span>{getProductName(c.componentProductId)}</span>
-                            <span className="font-mono">{c.expectedQty.toFixed(1)} {unitShort(getProductUnit(c.componentProductId))}</span>
+                          <div key={i} className="flex items-center gap-2 bg-background p-2 rounded border">
+                            <span className="flex-1 text-xs">{getProductName(c.componentProductId)}</span>
+                            <span className="font-mono text-xs text-muted-foreground whitespace-nowrap">{c.expectedQty.toFixed(1)}</span>
+                            <Input
+                              type="number"
+                              placeholder="Actual"
+                              value={blendActuals[c.componentProductId] || ""}
+                              onChange={e => setBlendActuals(prev => ({ ...prev, [c.componentProductId]: e.target.value }))}
+                              className="w-20 h-7 text-xs"
+                              data-testid={`input-blend-actual-${c.componentProductId}`}
+                            />
+                            <span className="text-xs text-muted-foreground">{unitShort(getProductUnit(c.componentProductId))}</span>
                           </div>
                         ))}
                       </div>

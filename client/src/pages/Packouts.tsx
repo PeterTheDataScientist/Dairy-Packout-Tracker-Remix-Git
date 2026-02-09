@@ -12,12 +12,12 @@ import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
 type Product = { id: number; name: string; category: string; unitType: string; active: boolean };
-type Packout = { id: number; date: string; productId: number; qty: string; unitType: string; packSizeLabel: string | null };
+type Packout = { id: number; date: string; productId: number; qty: string; unitType: string; packSizeLabel: string | null; sourceProductId: number | null; sourceQtyUsed: string | null };
 
 export default function Packouts() {
   const { toast } = useToast();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({ date: format(new Date(), "yyyy-MM-dd"), productId: "", qty: "", packSizeLabel: "" });
+  const [formData, setFormData] = useState({ date: format(new Date(), "yyyy-MM-dd"), productId: "", qty: "", packSizeLabel: "", sourceProductId: "", sourceQtyUsed: "" });
 
   const { data: packouts = [] } = useQuery<Packout[]>({ queryKey: ["/api/packouts"] });
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
@@ -34,7 +34,7 @@ export default function Packouts() {
       queryClient.invalidateQueries({ queryKey: ["/api/packouts"] });
       toast({ title: "Packout Recorded", description: "Finished goods logged." });
       setIsDialogOpen(false);
-      setFormData({ date: format(new Date(), "yyyy-MM-dd"), productId: "", qty: "", packSizeLabel: "" });
+      setFormData({ date: format(new Date(), "yyyy-MM-dd"), productId: "", qty: "", packSizeLabel: "", sourceProductId: "", sourceQtyUsed: "" });
     },
     onError: (err: any) => {
       toast({ variant: "destructive", title: "Error", description: err.message });
@@ -50,6 +50,8 @@ export default function Packouts() {
       qty: formData.qty,
       unitType: product?.unitType || "UNIT",
       packSizeLabel: formData.packSizeLabel || null,
+      sourceProductId: formData.sourceProductId ? parseInt(formData.sourceProductId) : null,
+      sourceQtyUsed: formData.sourceQtyUsed || null,
     });
   };
 
@@ -93,6 +95,7 @@ export default function Packouts() {
               <TableHead className="text-right">Quantity</TableHead>
               <TableHead>Unit</TableHead>
               <TableHead>Pack Size</TableHead>
+              <TableHead>Source</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -103,11 +106,12 @@ export default function Packouts() {
                 <TableCell className="text-right">{parseFloat(p.qty).toLocaleString()}</TableCell>
                 <TableCell className="text-muted-foreground text-xs">{p.unitType}</TableCell>
                 <TableCell className="text-muted-foreground text-sm">{p.packSizeLabel || "—"}</TableCell>
+                <TableCell className="text-muted-foreground text-sm">{p.sourceProductId ? getProductName(p.sourceProductId) : "—"}</TableCell>
               </TableRow>
             ))}
             {packouts.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No packouts recorded yet.</TableCell>
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No packouts recorded yet.</TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -143,6 +147,27 @@ export default function Packouts() {
             <div className="space-y-2">
               <Label>Pack Size Label (optional)</Label>
               <Input value={formData.packSizeLabel} onChange={e => setFormData({ ...formData, packSizeLabel: e.target.value })} placeholder="e.g. 500ml, 1kg" data-testid="input-packout-size" />
+            </div>
+            <div className="border-t pt-4 mt-2 space-y-2">
+              <Label className="text-xs text-muted-foreground">Filling Loss Tracking (optional)</Label>
+              <div className="space-y-2">
+                <Label className="text-xs">Source Product Used</Label>
+                <SearchableSelect
+                  options={products.filter(p => p.active).map(p => ({ value: String(p.id), label: `${p.name} (${p.unitType})` }))}
+                  value={formData.sourceProductId}
+                  onValueChange={val => setFormData({ ...formData, sourceProductId: val })}
+                  placeholder="Select source product"
+                  searchPlaceholder="Search products..."
+                  data-testid="select-packout-source"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Source Qty Used</Label>
+                <Input type="number" placeholder="How much was used" value={formData.sourceQtyUsed} onChange={e => setFormData({ ...formData, sourceQtyUsed: e.target.value })} data-testid="input-packout-source-qty" />
+              </div>
+              {formData.sourceQtyUsed && formData.qty && parseFloat(formData.sourceQtyUsed) > parseFloat(formData.qty) && (
+                <p className="text-xs text-amber-600">Filling loss: {(parseFloat(formData.sourceQtyUsed) - parseFloat(formData.qty)).toFixed(1)} ({((parseFloat(formData.sourceQtyUsed) - parseFloat(formData.qty)) / parseFloat(formData.sourceQtyUsed) * 100).toFixed(1)}%)</p>
+              )}
             </div>
           </div>
           <DialogFooter>

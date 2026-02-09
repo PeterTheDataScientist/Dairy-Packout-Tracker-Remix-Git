@@ -13,7 +13,7 @@ import { format } from "date-fns";
 
 type Product = { id: number; name: string; unitType: string; isIntermediate: boolean };
 type Supplier = { id: number; name: string; active: boolean };
-type Intake = { id: number; date: string; supplierId: number | null; productId: number; qty: string; unitType: string };
+type Intake = { id: number; date: string; supplierId: number | null; productId: number; qty: string; unitType: string; deliveredQty: string | null; acceptedQty: string | null };
 
 export default function IntakePage() {
   const { toast } = useToast();
@@ -23,6 +23,8 @@ export default function IntakePage() {
     supplierId: "",
     productId: "",
     qty: "",
+    deliveredQty: "",
+    acceptedQty: "",
   });
 
   const { data: intakes = [] } = useQuery<Intake[]>({ queryKey: ["/api/intakes"] });
@@ -38,7 +40,7 @@ export default function IntakePage() {
       queryClient.invalidateQueries({ queryKey: ["/api/intakes"] });
       toast({ title: "Intake Recorded", description: "Delivery has been logged." });
       setIsDialogOpen(false);
-      setFormData({ date: format(new Date(), "yyyy-MM-dd"), supplierId: "", productId: "", qty: "" });
+      setFormData({ date: format(new Date(), "yyyy-MM-dd"), supplierId: "", productId: "", qty: "", deliveredQty: "", acceptedQty: "" });
     },
     onError: (err: any) => {
       toast({ variant: "destructive", title: "Error", description: err.message });
@@ -54,6 +56,8 @@ export default function IntakePage() {
       productId: parseInt(formData.productId),
       qty: formData.qty,
       unitType: product?.unitType || "LITER",
+      deliveredQty: formData.deliveredQty || null,
+      acceptedQty: formData.acceptedQty || formData.qty,
     });
   };
 
@@ -80,6 +84,8 @@ export default function IntakePage() {
               <TableHead>Supplier</TableHead>
               <TableHead>Product</TableHead>
               <TableHead className="text-right">Quantity</TableHead>
+              <TableHead className="text-right">Delivered</TableHead>
+              <TableHead className="text-right">Accepted</TableHead>
               <TableHead>Unit</TableHead>
             </TableRow>
           </TableHeader>
@@ -90,12 +96,14 @@ export default function IntakePage() {
                 <TableCell>{getSupplierName(intake.supplierId)}</TableCell>
                 <TableCell className="font-medium">{getProductName(intake.productId)}</TableCell>
                 <TableCell className="text-right font-medium">{parseFloat(intake.qty).toLocaleString()}</TableCell>
+                <TableCell className="text-right text-muted-foreground">{intake.deliveredQty ? parseFloat(intake.deliveredQty).toLocaleString() : "—"}</TableCell>
+                <TableCell className="text-right text-muted-foreground">{intake.acceptedQty ? parseFloat(intake.acceptedQty).toLocaleString() : "—"}</TableCell>
                 <TableCell className="text-muted-foreground text-xs">{intake.unitType}</TableCell>
               </TableRow>
             ))}
             {intakes.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No intake records yet.</TableCell>
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No intake records yet.</TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -138,6 +146,22 @@ export default function IntakePage() {
             <div className="space-y-2">
               <Label>Quantity</Label>
               <Input type="number" placeholder="0" value={formData.qty} onChange={e => setFormData({ ...formData, qty: e.target.value })} data-testid="input-intake-qty" />
+            </div>
+            <div className="border-t pt-4 mt-2 space-y-2">
+              <Label className="text-xs text-muted-foreground">Receiving Loss Tracking (optional)</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Delivered Qty</Label>
+                  <Input type="number" placeholder="Truck qty" value={formData.deliveredQty} onChange={e => setFormData({ ...formData, deliveredQty: e.target.value })} data-testid="input-intake-delivered" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Accepted Qty</Label>
+                  <Input type="number" placeholder="Accepted qty" value={formData.acceptedQty} onChange={e => setFormData({ ...formData, acceptedQty: e.target.value })} data-testid="input-intake-accepted" />
+                </div>
+              </div>
+              {formData.deliveredQty && formData.acceptedQty && parseFloat(formData.deliveredQty) > parseFloat(formData.acceptedQty) && (
+                <p className="text-xs text-amber-600">Receiving loss: {(parseFloat(formData.deliveredQty) - parseFloat(formData.acceptedQty)).toFixed(1)} ({((parseFloat(formData.deliveredQty) - parseFloat(formData.acceptedQty)) / parseFloat(formData.deliveredQty) * 100).toFixed(1)}%)</p>
+              )}
             </div>
           </div>
           <DialogFooter>
