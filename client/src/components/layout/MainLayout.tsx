@@ -25,7 +25,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Home,
-  TrendingDown
+  TrendingDown,
+  BarChart3,
+  PieChart,
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/lib/auth";
@@ -44,6 +46,8 @@ const routeTitles: Record<string, string> = {
   "/formulas": "Formulas",
   "/approvals": "Approvals",
   "/suppliers": "Suppliers",
+  "/running-stock": "Running Stock",
+  "/allocation": "Daily Allocation",
   "/my-history": "My History",
 };
 
@@ -66,6 +70,8 @@ export function AppSidebar() {
       : [
           { title: "Reports", icon: FileBarChart, path: "/reports" },
           { title: "Loss Breakdown", icon: TrendingDown, path: "/loss-breakdown" },
+          { title: "Running Stock", icon: BarChart3, path: "/running-stock" },
+          { title: "Allocation", icon: PieChart, path: "/allocation" },
         ]
     ),
   ];

@@ -18,6 +18,8 @@ import MyHistory from "@/pages/MyHistory";
 import Intake from "@/pages/Intake";
 import Suppliers from "@/pages/Suppliers";
 import LossBreakdown from "@/pages/LossBreakdown";
+import RunningStock from "@/pages/RunningStock";
+import Allocation from "@/pages/Allocation";
 import { Loader2 } from "lucide-react";
 
 function AppRoutes() {
@@ -48,6 +50,8 @@ function AppRoutes() {
         <Route path="/approvals" component={Approvals} />
         <Route path="/suppliers" component={Suppliers} />
         <Route path="/loss-breakdown" component={LossBreakdown} />
+        <Route path="/running-stock" component={RunningStock} />
+        <Route path="/allocation" component={Allocation} />
         <Route path="/my-history" component={MyHistory} />
         <Route component={NotFound} />
       </Switch>
