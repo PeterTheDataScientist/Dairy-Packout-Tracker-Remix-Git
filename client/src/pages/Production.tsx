@@ -15,7 +15,7 @@ import { Plus, ArrowRight, AlertTriangle, CheckCircle2, Beaker, Info, Pencil, Tr
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
-type Product = { id: number; name: string; unitType: string; category: string; active: boolean };
+type Product = { id: number; name: string; unitType: string; category: string; active: boolean; isIntermediate: boolean };
 type FormulaWithDetails = {
   id: number; name: string; type: "CONVERSION" | "BLEND"; outputProductId: number; active: boolean;
   conversion?: { inputProductId: number; ratioNumerator: string; ratioDenominator: string };
@@ -39,7 +39,7 @@ export default function Production() {
   const { data: formulas = [] } = useQuery<FormulaWithDetails[]>({ queryKey: ["/api/formulas"] });
   const { data: lineItems = [] } = useQuery<LineItem[]>({ queryKey: ["/api/production/line-items"] });
 
-  const activeProducts = products.filter(p => p.active && p.category !== "RAW_MILK");
+  const activeProducts = products.filter(p => p.active && p.category !== "RAW_MILK" && !p.isIntermediate);
 
   const productOptions = useMemo(() => {
     return activeProducts

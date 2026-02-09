@@ -131,6 +131,21 @@ async function seedProducts() {
     { name: "RAW MILK", category: "RAW_MILK" as const, unitType: "LITER" as const, isIntermediate: true },
     { name: "YOGURT BASE (BULK)", category: "YOGURT" as const, unitType: "LITER" as const, isIntermediate: false },
     { name: "YOGURT BASE 20L BUCKET", category: "YOGURT" as const, unitType: "UNIT" as const, isIntermediate: false },
+
+    { name: "DTY BASE (BULK)", category: "DTY" as const, unitType: "LITER" as const, isIntermediate: true },
+    { name: "SMOOTHIE BASE (BULK)", category: "SMOOTHY" as const, unitType: "LITER" as const, isIntermediate: true },
+
+    { name: "STRAWBERRY PULP", category: "OTHER" as const, unitType: "KG" as const, isIntermediate: false },
+    { name: "PASSION FRUIT PULP", category: "OTHER" as const, unitType: "KG" as const, isIntermediate: false },
+    { name: "VANILLA FLAVOR", category: "OTHER" as const, unitType: "KG" as const, isIntermediate: false },
+    { name: "RASPBERRY PULP", category: "OTHER" as const, unitType: "KG" as const, isIntermediate: false },
+    { name: "MIXED BERRY PULP", category: "OTHER" as const, unitType: "KG" as const, isIntermediate: false },
+    { name: "COCONUT PULP", category: "OTHER" as const, unitType: "KG" as const, isIntermediate: false },
+    { name: "STRAWBERRY PUREE", category: "OTHER" as const, unitType: "KG" as const, isIntermediate: false },
+    { name: "PASSION PUREE", category: "OTHER" as const, unitType: "KG" as const, isIntermediate: false },
+    { name: "MIXED BERRY PUREE", category: "OTHER" as const, unitType: "KG" as const, isIntermediate: false },
+    { name: "MANGO PUREE", category: "OTHER" as const, unitType: "KG" as const, isIntermediate: false },
+    { name: "PINA COLADA PUREE", category: "OTHER" as const, unitType: "KG" as const, isIntermediate: false },
   ];
 
   for (const product of allProducts) {
@@ -209,11 +224,10 @@ async function seedFormulas() {
   addConversion("Yogurt Base to Passion Fruit Yogurt", passionYogurt, yogurtBase, 1, 1);
   addConversion("Yogurt Base to Vanilla Yogurt", vanillaYogurt, yogurtBase, 1, 1);
   addConversion("Yogurt Base to Probiotic Yogurt", probioYogurt, yogurtBase, 1, 1);
-  addConversion("Yogurt Base to Strawberry Smoothie", smoothieStrawberry, yogurtBase, 1, 1);
-  addConversion("Yogurt Base to Passion Fruit Smoothie", smoothiePassion, yogurtBase, 1, 1);
-  addConversion("Yogurt Base to Mixed Berry Smoothie", smoothieBerry, yogurtBase, 1, 1);
-  addConversion("Yogurt Base to Pina Colada Smoothie", smoothiePina, yogurtBase, 1, 1);
-  addConversion("Yogurt Base to Mango Smoothie", smoothieMango, yogurtBase, 1, 1);
+  const dtyBase = findProduct("DTY BASE (BULK)");
+  const smoothieBase = findProduct("SMOOTHIE BASE (BULK)");
+  addConversion("Yogurt Base to DTY BASE", dtyBase, yogurtBase, 2, 1);
+  addConversion("Yogurt Base to SMOOTHIE BASE", smoothieBase, yogurtBase, 1, 1);
 
   addConversion("Cream Cheese to Cucumber & Dill Dip", cucumberDillDip, creamCheese, 1, 1);
   addConversion("Cream Cheese to Black Pepper Dip", blackPepperDip, creamCheese, 1, 1);
@@ -242,5 +256,92 @@ async function seedFormulas() {
     });
   }
 
-  console.log(`Seeded ${conversionDefs.length} formulas.`);
+  console.log(`Seeded ${conversionDefs.length} conversion formulas.`);
+
+  const strawberryPulp = findProduct("STRAWBERRY PULP");
+  const passionPulp = findProduct("PASSION FRUIT PULP");
+  const vanillaFlavor = findProduct("VANILLA FLAVOR");
+  const raspberryPulp = findProduct("RASPBERRY PULP");
+  const mixedBerryPulp = findProduct("MIXED BERRY PULP");
+  const coconutPulp = findProduct("COCONUT PULP");
+  const strawberryPuree = findProduct("STRAWBERRY PUREE");
+  const passionPuree = findProduct("PASSION PUREE");
+  const mixedBerryPuree = findProduct("MIXED BERRY PUREE");
+  const mangoPuree = findProduct("MANGO PUREE");
+  const pinaColadaPuree = findProduct("PINA COLADA PUREE");
+
+  type BlendDef = { name: string; outputName: string; components: { product: any; fraction: string }[] };
+  const blendDefs: BlendDef[] = [];
+
+  const dtyFlavors: { flavor: string; pulp: any; baseFrac: string; pulpFrac: string; sizes: string[] }[] = [
+    { flavor: "Strawberry", pulp: strawberryPulp, baseFrac: "0.9884", pulpFrac: "0.0116", sizes: ["175g", "500g", "1kg"] },
+    { flavor: "Passion", pulp: passionPulp, baseFrac: "0.9884", pulpFrac: "0.0116", sizes: ["175g", "500g", "1kg"] },
+    { flavor: "Vanilla", pulp: vanillaFlavor, baseFrac: "0.9885", pulpFrac: "0.0115", sizes: ["175g", "500g", "1kg"] },
+    { flavor: "Raspberry", pulp: raspberryPulp, baseFrac: "0.9883", pulpFrac: "0.0117", sizes: ["500g", "1kg"] },
+    { flavor: "Mixed Berry", pulp: mixedBerryPulp, baseFrac: "0.9884", pulpFrac: "0.0116", sizes: ["175g", "500g", "1kg"] },
+    { flavor: "Coconut", pulp: coconutPulp, baseFrac: "0.9847", pulpFrac: "0.0153", sizes: ["175g", "500g", "1kg"] },
+  ];
+
+  for (const f of dtyFlavors) {
+    for (const size of f.sizes) {
+      const outputName = `ZIM DELI D-THICK ${f.flavor.toUpperCase()} YOGURT TUB ${size}`;
+      const output = findProduct(outputName);
+      if (output && dtyBase && f.pulp) {
+        blendDefs.push({
+          name: `${f.flavor} DTY Blend ${size}`,
+          outputName,
+          components: [
+            { product: dtyBase, fraction: f.baseFrac },
+            { product: f.pulp, fraction: f.pulpFrac },
+          ],
+        });
+      }
+    }
+  }
+
+  const smoothieFlavors: { name: string; outputName: string; puree: any }[] = [
+    { name: "Strawberry Smoothie Blend", outputName: "YOMILK YO' SMOOTHY STRAWBERRY 300ML", puree: strawberryPuree },
+    { name: "Passion Fruit Smoothie Blend", outputName: "YOMILK YO' SMOOTHY PASSION FRUIT 300ML", puree: passionPuree },
+    { name: "Mixed Berry Smoothie Blend", outputName: "YOMILK YO' SMOOTHY MIXED BERRY 300ML", puree: mixedBerryPuree },
+    { name: "Pina Colada Smoothie Blend", outputName: "YOMILK YO' SMOOTHY PINA COLADA 300ML", puree: pinaColadaPuree },
+    { name: "Mango Smoothie Blend", outputName: "YOMILK YO' SMOOTHY MANGO 300ML", puree: mangoPuree },
+  ];
+
+  for (const s of smoothieFlavors) {
+    const output = findProduct(s.outputName);
+    if (output && smoothieBase && s.puree) {
+      blendDefs.push({
+        name: s.name,
+        outputName: s.outputName,
+        components: [
+          { product: smoothieBase, fraction: "0.9888" },
+          { product: s.puree, fraction: "0.0112" },
+        ],
+      });
+    }
+  }
+
+  let blendCount = 0;
+  for (const def of blendDefs) {
+    const output = findProduct(def.outputName);
+    if (!output) continue;
+    const [formula] = await db.insert(formulas).values({
+      name: def.name,
+      type: "BLEND" as const,
+      outputProductId: output.id,
+      inputBasis: "PER_UNIT_OUTPUT" as const,
+      active: true,
+      version: 1,
+    }).returning();
+
+    for (const comp of def.components) {
+      await db.insert(blendComponents).values({
+        formulaId: formula.id,
+        componentProductId: comp.product.id,
+        fraction: comp.fraction,
+      });
+    }
+    blendCount++;
+  }
+  console.log(`Seeded ${blendCount} blend formulas.`);
 }
