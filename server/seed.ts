@@ -198,7 +198,7 @@ async function seedFormulas() {
   addConversion("Raw Milk to Yogurt Base", yogurtBase, rawMilkInput, 1, 1);
   addConversion("Raw Milk to Fresh Milk", freshMilk, rawMilkInput, 1, 1);
   addConversion("Raw Milk to Yolac", yolac, rawMilkInput, 1.1, 1);
-  addConversion("Raw Milk to Feta", feta, rawMilkInput, 7, 1);
+  addConversion("Raw Milk to Feta", feta, rawMilkInput, 5, 1);
   addConversion("Raw Milk to Hodzeko", hodzeko, rawMilkInput, 1.2, 1);
 
   addConversion("Yogurt Base to Double Thick Yogurt", doubleThick, yogurtBase, 2, 1);
