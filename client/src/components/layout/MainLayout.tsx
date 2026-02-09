@@ -24,7 +24,8 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Home
+  Home,
+  TrendingDown
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/lib/auth";
@@ -38,6 +39,7 @@ const routeTitles: Record<string, string> = {
   "/production": "Production",
   "/packouts": "Packouts",
   "/reports": "Reports",
+  "/loss-breakdown": "Loss Breakdown",
   "/products": "Products",
   "/formulas": "Formulas",
   "/approvals": "Approvals",
@@ -61,7 +63,10 @@ export function AppSidebar() {
     { title: "Packouts", icon: Package, path: "/packouts" },
     ...(isDataEntry
       ? [{ title: "My History", icon: History, path: "/my-history" }]
-      : [{ title: "Reports", icon: FileBarChart, path: "/reports" }]
+      : [
+          { title: "Reports", icon: FileBarChart, path: "/reports" },
+          { title: "Loss Breakdown", icon: TrendingDown, path: "/loss-breakdown" },
+        ]
     ),
   ];
 
