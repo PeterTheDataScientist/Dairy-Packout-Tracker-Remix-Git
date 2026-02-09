@@ -37,6 +37,12 @@ export async function registerRoutes(
     res.json({ user: req.user });
   });
 
+  // --- USERS (admin) ---
+  app.get("/api/users", requireAdmin, async (_req, res) => {
+    const list = await storage.getUsers();
+    res.json(list.map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role })));
+  });
+
   // --- SUPPLIERS ---
   app.get("/api/suppliers", requireAuth, async (_req, res) => {
     const list = await storage.getSuppliers();
@@ -336,13 +342,10 @@ export async function registerRoutes(
     res.status(201).json(l);
   });
 
-  app.put("/api/production/line-items/:id", requireAuth, async (req, res) => {
+  app.put("/api/production/line-items/:id", requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id);
     const existing = await storage.getLineItem(id);
     if (!existing) return res.status(404).json({ error: "Not found" });
-    if (existing.createdByUserId !== req.user!.id && req.user!.role !== "ADMIN") {
-      return res.status(403).json({ error: "You can only edit your own records" });
-    }
     const { outputQty, inputQty, outputProductId, inputProductId, formulaId, operationType } = req.body;
     const updates: any = {};
     if (outputQty !== undefined) updates.outputQty = outputQty;
@@ -367,13 +370,10 @@ export async function registerRoutes(
     res.json(updated);
   });
 
-  app.delete("/api/production/line-items/:id", requireAuth, async (req, res) => {
+  app.delete("/api/production/line-items/:id", requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id);
     const existing = await storage.getLineItem(id);
     if (!existing) return res.status(404).json({ error: "Not found" });
-    if (existing.createdByUserId !== req.user!.id && req.user!.role !== "ADMIN") {
-      return res.status(403).json({ error: "You can only delete your own records" });
-    }
     await storage.deleteLineItem(id);
     await storage.createEvent({
       actorUserId: req.user!.id,
@@ -401,6 +401,12 @@ export async function registerRoutes(
     const lineItemId = parseInt(req.params.id);
     const { components } = req.body;
     if (!Array.isArray(components)) return res.status(400).json({ error: "components array required" });
+
+    const existingUsage = await storage.getBlendActualUsageByLineItem(lineItemId);
+    if (existingUsage.length > 0 && req.user!.role !== "ADMIN") {
+      return res.status(403).json({ error: "DATA_ENTRY cannot update existing blend usage. Submit a change request instead." });
+    }
+
     await storage.deleteBlendActualUsageByLineItem(lineItemId);
     const results = [];
     for (const comp of components) {
@@ -442,13 +448,10 @@ export async function registerRoutes(
     res.status(201).json(p);
   });
 
-  app.put("/api/packouts/:id", requireAuth, async (req, res) => {
+  app.put("/api/packouts/:id", requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id);
     const existing = await storage.getPackout(id);
     if (!existing) return res.status(404).json({ error: "Not found" });
-    if (existing.createdByUserId !== req.user!.id && req.user!.role !== "ADMIN") {
-      return res.status(403).json({ error: "You can only edit your own records" });
-    }
     const { qty, productId, date, packSizeLabel, sourceProductId, sourceQtyUsed } = req.body;
     const updates: any = {};
     if (qty !== undefined) updates.qty = qty;
@@ -473,13 +476,10 @@ export async function registerRoutes(
     res.json(updated);
   });
 
-  app.delete("/api/packouts/:id", requireAuth, async (req, res) => {
+  app.delete("/api/packouts/:id", requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id);
     const existing = await storage.getPackout(id);
     if (!existing) return res.status(404).json({ error: "Not found" });
-    if (existing.createdByUserId !== req.user!.id && req.user!.role !== "ADMIN") {
-      return res.status(403).json({ error: "You can only delete your own records" });
-    }
     await storage.deletePackout(id);
     await storage.createEvent({
       actorUserId: req.user!.id,
@@ -497,13 +497,10 @@ export async function registerRoutes(
   });
 
   // --- DAILY INTAKES (edit/delete) ---
-  app.put("/api/intakes/:id", requireAuth, async (req, res) => {
+  app.put("/api/intakes/:id", requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id);
     const existing = await storage.getDailyIntake(id);
     if (!existing) return res.status(404).json({ error: "Not found" });
-    if (existing.createdByUserId !== req.user!.id && req.user!.role !== "ADMIN") {
-      return res.status(403).json({ error: "You can only edit your own records" });
-    }
     const { qty, productId, supplierId, date, deliveredQty, acceptedQty } = req.body;
     const updates: any = {};
     if (qty !== undefined) updates.qty = qty;
@@ -528,13 +525,10 @@ export async function registerRoutes(
     res.json(updated);
   });
 
-  app.delete("/api/intakes/:id", requireAuth, async (req, res) => {
+  app.delete("/api/intakes/:id", requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id);
     const existing = await storage.getDailyIntake(id);
     if (!existing) return res.status(404).json({ error: "Not found" });
-    if (existing.createdByUserId !== req.user!.id && req.user!.role !== "ADMIN") {
-      return res.status(403).json({ error: "You can only delete your own records" });
-    }
     await storage.deleteDailyIntake(id);
     await storage.createEvent({
       actorUserId: req.user!.id,
@@ -559,8 +553,39 @@ export async function registerRoutes(
   });
 
   app.post("/api/change-requests", requireAuth, async (req, res) => {
+    const { entityType, entityId, fieldName, proposedValue, currentValue, reason } = req.body;
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ message: "Reason for change is required" });
+    }
+    if (!entityType || !entityId || !fieldName || proposedValue === undefined) {
+      return res.status(400).json({ message: "entityType, entityId, fieldName, and proposedValue are required" });
+    }
+
+    const entityLookup: Record<string, (id: number) => Promise<any>> = {
+      daily_intake: (id) => storage.getDailyIntake(id),
+      production_batch: (id) => storage.getProductionBatch(id),
+      production_line_item: (id) => storage.getLineItem(id),
+      blend_actual_usage: (id) => storage.getBlendActualUsageById(id),
+      packout: (id) => storage.getPackout(id),
+      supplier: (id) => storage.getSupplier(id),
+      product: (id) => storage.getProduct(id),
+      formula: (id) => storage.getFormula(id),
+      yield_tolerance: (id) => storage.getYieldTolerance(id),
+    };
+
+    const lookupFn = entityLookup[entityType];
+    if (lookupFn) {
+      const entity = await lookupFn(parseInt(entityId));
+      if (!entity) return res.status(404).json({ message: `${entityType} #${entityId} not found` });
+    }
+
     const cr = await storage.createChangeRequest({
-      ...req.body,
+      entityType,
+      entityId: parseInt(entityId),
+      fieldName,
+      proposedValue: String(proposedValue),
+      currentValue: currentValue != null ? String(currentValue) : null,
+      reason: reason.trim(),
       requestedByUserId: req.user!.id,
     });
     await storage.createEvent({
@@ -572,8 +597,8 @@ export async function registerRoutes(
       fieldName: cr.fieldName,
       oldValue: cr.currentValue,
       newValue: cr.proposedValue,
-      reason: null,
-      metadataJson: null,
+      reason: cr.reason,
+      metadataJson: JSON.stringify({ targetEntityType: cr.entityType, targetEntityId: cr.entityId }),
     });
     res.status(201).json(cr);
   });
@@ -581,22 +606,128 @@ export async function registerRoutes(
   app.patch("/api/change-requests/:id", requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id);
     const { status, adminComment } = req.body;
-    const cr = await storage.updateChangeRequestStatus(id, status, req.user!.id, adminComment);
-    if (!cr) return res.status(404).json({ message: "Not found" });
 
-    await storage.createEvent({
-      actorUserId: req.user!.id,
-      entityType: "change_request",
-      entityId: id,
-      action: status === "APPROVED" ? "APPROVE" : "REJECT",
-      ipAddress: req.ip || null,
-      fieldName: null,
-      oldValue: null,
-      newValue: JSON.stringify(cr),
-      reason: adminComment || null,
-      metadataJson: null,
-    });
-    res.json(cr);
+    const existing = await storage.getChangeRequest(id);
+    if (!existing) return res.status(404).json({ message: "Not found" });
+    if (existing.status !== "PENDING") return res.status(400).json({ message: "Change request already processed" });
+
+    if (status === "APPROVED") {
+      const entityUpdaters: Record<string, (eId: number, field: string, value: string) => Promise<{ old: any; updated: any } | null>> = {
+        daily_intake: async (eId, field, value) => {
+          const old = await storage.getDailyIntake(eId);
+          if (!old) return null;
+          const updated = await storage.updateDailyIntake(eId, { [field]: value });
+          return { old, updated };
+        },
+        production_batch: async (eId, field, value) => {
+          const old = await storage.getProductionBatch(eId);
+          if (!old) return null;
+          const updated = await storage.updateProductionBatch(eId, { [field]: value });
+          return { old, updated };
+        },
+        production_line_item: async (eId, field, value) => {
+          const old = await storage.getLineItem(eId);
+          if (!old) return null;
+          const updated = await storage.updateLineItem(eId, { [field]: value });
+          return { old, updated };
+        },
+        blend_actual_usage: async (eId, field, value) => {
+          const old = await storage.getBlendActualUsageById(eId);
+          if (!old) return null;
+          const updated = await storage.updateBlendActualUsage(eId, { [field]: value });
+          return { old, updated };
+        },
+        packout: async (eId, field, value) => {
+          const old = await storage.getPackout(eId);
+          if (!old) return null;
+          const updated = await storage.updatePackout(eId, { [field]: value });
+          return { old, updated };
+        },
+        supplier: async (eId, field, value) => {
+          const old = await storage.getSupplier(eId);
+          if (!old) return null;
+          const updated = await storage.updateSupplier(eId, { [field]: value });
+          return { old, updated };
+        },
+        product: async (eId, field, value) => {
+          const old = await storage.getProduct(eId);
+          if (!old) return null;
+          const updated = await storage.updateProduct(eId, { [field]: value });
+          return { old, updated };
+        },
+        formula: async (eId, field, value) => {
+          const old = await storage.getFormula(eId);
+          if (!old) return null;
+          const updated = await storage.updateFormula(eId, { [field]: value });
+          return { old, updated };
+        },
+        yield_tolerance: async (eId, field, value) => {
+          const old = await storage.getYieldTolerance(eId);
+          if (!old) return null;
+          const updated = await storage.updateYieldTolerance(eId, { [field]: value });
+          return { old, updated };
+        },
+      };
+
+      const updater = entityUpdaters[existing.entityType];
+      if (updater) {
+        const result = await updater(existing.entityId, existing.fieldName, existing.proposedValue);
+        if (!result) return res.status(404).json({ message: `${existing.entityType} #${existing.entityId} no longer exists` });
+
+        const oldVal = (result.old as any)[existing.fieldName];
+        const newVal = (result.updated as any)[existing.fieldName];
+        await storage.createEvent({
+          actorUserId: req.user!.id,
+          entityType: existing.entityType,
+          entityId: existing.entityId,
+          action: "UPDATE",
+          ipAddress: req.ip || null,
+          fieldName: existing.fieldName,
+          oldValue: oldVal != null ? String(oldVal) : null,
+          newValue: newVal != null ? String(newVal) : null,
+          reason: `Approved change request #${id}` + (adminComment ? `: ${adminComment}` : ""),
+          metadataJson: JSON.stringify({ changeRequestId: id }),
+        });
+      }
+
+      const cr = await storage.updateChangeRequestStatus(id, "APPROVED", req.user!.id, adminComment);
+
+      await storage.createEvent({
+        actorUserId: req.user!.id,
+        entityType: "change_request",
+        entityId: id,
+        action: "APPROVE",
+        ipAddress: req.ip || null,
+        fieldName: null,
+        oldValue: "PENDING",
+        newValue: "APPROVED",
+        reason: adminComment || null,
+        metadataJson: null,
+      });
+
+      return res.json(cr);
+    }
+
+    if (status === "REJECTED") {
+      const cr = await storage.updateChangeRequestStatus(id, "REJECTED", req.user!.id, adminComment);
+
+      await storage.createEvent({
+        actorUserId: req.user!.id,
+        entityType: "change_request",
+        entityId: id,
+        action: "REJECT",
+        ipAddress: req.ip || null,
+        fieldName: null,
+        oldValue: "PENDING",
+        newValue: "REJECTED",
+        reason: adminComment || null,
+        metadataJson: JSON.stringify({ rejectionReason: adminComment, originalEntityType: existing.entityType, originalEntityId: existing.entityId }),
+      });
+
+      return res.json(cr);
+    }
+
+    res.status(400).json({ message: "Invalid status. Must be APPROVED or REJECTED" });
   });
 
   // --- AUDIT LOG ---
