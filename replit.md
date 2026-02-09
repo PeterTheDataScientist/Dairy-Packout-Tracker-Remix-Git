@@ -72,6 +72,7 @@ Tracks daily running stock for two key material buckets:
 - **Yogurt Base** — daily produced (from line item outputs) vs used+packed (from line item inputs + packouts), cumulative running stock
 - API endpoint: `/api/reports/running-stock` with dateFrom/dateTo query params (admin only)
 - Frontend page: `/running-stock` with date range picker, charts, tables, CSV export
+- Includes **Data Gaps** panel listing CONVERT line items with missing input quantities
 
 ### Daily Allocation Report
 Shows how raw milk was distributed across product categories on a given day:
@@ -79,6 +80,13 @@ Shows how raw milk was distributed across product categories on a given day:
 - Shows total input used per category with drill-down to individual operations
 - API endpoint: `/api/reports/allocation?date=YYYY-MM-DD` (admin only)
 - Frontend page: `/allocation` with collapsible category cards, CSV export
+- Includes **Data Gaps** panel listing CONVERT line items with missing input quantities
+
+### Production Data Integrity Guardrails
+- **Auto-fill inputQty**: When creating/editing a CONVERT line item with null/empty inputQty, the server computes it from the formula ratio and outputQty. For UNIT-type output products with packSizeQty, it converts units to volume first (e.g., 34 units x 1L = 34L), then applies the formula ratio.
+- **inputQtyAutoFilled flag**: Returned in POST/PUT responses when auto-fill occurs; recorded in audit event metadata.
+- **Output equivalent**: Production form shows volume/weight equivalent for UNIT products (e.g., "34 units = 34L").
+- **Data gaps detection**: `findDataGaps()` helper scans CONVERT line items with null/0 inputQty across a date range, surfaced in Running Stock and Allocation APIs as `dataGaps` array.
 
 ### Pack Size Tracking
 Products with unitType=UNIT have optional pack size fields:
