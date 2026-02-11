@@ -1,0 +1,50 @@
+We are continuing from the existing YoMilk Replit app (do NOT rebuild). Implement fixes from manual testing:
+
+1) Intake quantity meaning + UX
+- Clarify data model/UX: deliveredQty = supplier delivered, acceptedQty = accepted into stock.
+- The main intake qty field must represent “stock added” (accepted quantity).
+- If user provides deliveredQty + acceptedQty, auto-set qty = acceptedQty and label it clearly.
+- If only qty is provided, leave delivered/accepted blank (no receiving loss calc).
+- Update table columns/naming so it’s not confusing (Quantity vs Delivered vs Accepted).
+
+2) Fix conversion expected/variance calculations for UNIT products using pack size
+- The DTY 20L test proves a bug: expected input uses raw UNIT count instead of volume equivalent.
+- For any CONVERSION calculation where output product unitType=UNIT and has packSizeQty+packSizeUnit, convert outputQtyUnits -> outputEquivalent (L or KG) before applying formula ratio.
+- Similarly, if input product is UNIT and has packSize, convert input units to base qty where needed for variance.
+- Ensure expected input for DTY 20L: 10 units -> 200L output; ratio 2:1 => expected input 400L yogurt base.
+
+3) Reduce noisy unit mismatch warnings
+- Only show “unit mismatch” warning if conversion cannot be derived.
+- If UNIT has pack size and conversion to base unit is possible, show a small info message (or no warning), not a big persistent warning.
+
+4) Fix formula linkage causing unit mismatch for yogurt base
+- The formula for RAW MILK -> YOGURT BASE (BULK) should use the RAW MILK product that is measured in LITER (not a packaged “RAW MILK 5 LTR” UNIT product), to avoid incorrect expected inputs.
+- Audit and update any formulas that use packaged/UNIT raw milk as the input for bulk products. Bulk-to-bulk conversions should be LITER/KG consistent.
+
+5) Make product/supplier/formula selects searchable + alphabetically sorted
+- Replace shadcn Select with a searchable combobox for:
+  - Intake: Supplier, Product
+  - Production: “What did you make?”, formula selection
+  - Packout: Product, Source Product
+- Always sort options alphabetically (A→Z) client-side or API-side (but consistent everywhere).
+
+6) Batch code behavior
+- Auto-generate a default batch code: B-YYYYMMDD-### when opening “Record Production”.
+- Allow editing (ADMIN always; DATA_ENTRY either allowed or not based on existing rules, but keep current if unsure).
+
+7) Packout “Source Qty Used” UX and meaning
+- Keep current schema fields, but make it intuitive:
+  - If packout product is UNIT with pack size, display “output equivalent” (like production).
+  - Auto-suggest sourceQtyUsed based on output equivalent (and default source product if a clear upstream exists), but allow override.
+  - Add helper text: “Source Qty Used = how much bulk material was consumed to create this packout record (not per unit, the total for this record).”
+
+8) Fix role-switch UI cache issue (admin vs data_entry menu shown until refresh)
+- When user logs out/logs in, ensure auth state + React Query cache are reset.
+- On logout: clear query cache and user state.
+- On login success: invalidate /me and re-render navigation immediately so correct role menus show without refresh.
+
+After implementing, verify with these manual tests:
+- Produce 10 units of DTY 20L at 2:1; expected input should show 400L yogurt base.
+- Create intake with delivered 6000, accepted 5000; qty should auto be 5000 and receiving loss shown.
+- All dropdowns should be searchable and A–Z sorted.
+- Switching users should update nav immediately without refresh.

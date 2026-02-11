@@ -44,8 +44,8 @@ export default function Production() {
 
   const productOptions = useMemo(() => {
     return activeProducts
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map(p => ({ value: String(p.id), label: p.name }));
+      .map(p => ({ value: String(p.id), label: p.name }))
+      .sort((a, b) => a.label.localeCompare(b.label));
   }, [activeProducts]);
 
   const selectedProduct = products.find(p => p.id === parseInt(selectedProductId));
@@ -71,13 +71,30 @@ export default function Production() {
     return "units";
   };
 
+  const outputEquivalent = useMemo(() => {
+    if (!selectedProduct || !outputQty) return null;
+    const outQ = parseFloat(outputQty);
+    if (isNaN(outQ) || outQ <= 0) return null;
+    if (selectedProduct.unitType === "UNIT" && selectedProduct.packSizeQty) {
+      const packSize = parseFloat(selectedProduct.packSizeQty);
+      const volume = outQ * packSize;
+      const unitLabel = selectedProduct.packSizeUnit === "KILOGRAM" ? "kg" : "L";
+      return { volume, unitLabel, packSize };
+    }
+    return null;
+  }, [selectedProduct, outputQty]);
+
   const calculations = useMemo(() => {
     if (!matchedFormula || !outputQty) return null;
     const outQ = parseFloat(outputQty);
     if (isNaN(outQ) || outQ <= 0) return null;
     if (matchedFormula.type === "CONVERSION" && matchedFormula.conversion) {
       const ratio = parseFloat(matchedFormula.conversion.ratioNumerator) / parseFloat(matchedFormula.conversion.ratioDenominator);
-      const expectedInput = outQ * ratio;
+      let effectiveOutputQty = outQ;
+      if (selectedProduct?.unitType === "UNIT" && selectedProduct?.packSizeQty) {
+        effectiveOutputQty = outQ * parseFloat(selectedProduct.packSizeQty);
+      }
+      const expectedInput = effectiveOutputQty * ratio;
       let variance = 0;
       if (actualInputQty) {
         variance = ((parseFloat(actualInputQty) - expectedInput) / expectedInput) * 100;
@@ -358,10 +375,10 @@ export default function Production() {
                       {unitLabel(selectedProduct.unitType)}
                     </span>
                   </div>
-                  {selectedProduct.unitType === "UNIT" && selectedProduct.packSizeQty && outputQty && (
+                  {outputEquivalent && (
                     <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center gap-1" data-testid="text-output-equivalent">
                       <Info className="h-3 w-3" />
-                      Output equivalent: {parseFloat(outputQty)} units = {(parseFloat(outputQty) * parseFloat(selectedProduct.packSizeQty)).toFixed(1)} {selectedProduct.packSizeUnit === "KILOGRAM" ? "kg" : "L"}
+                      Output equivalent: {parseFloat(outputQty)} units = {outputEquivalent.volume.toFixed(1)} {outputEquivalent.unitLabel}
                       {selectedProduct.packSizeLabel && <span className="text-muted-foreground">({selectedProduct.packSizeLabel} per unit)</span>}
                     </p>
                   )}
@@ -369,7 +386,8 @@ export default function Production() {
 
                 {matchedFormula && matchedFormula.type === "CONVERSION" && matchedFormula.conversion &&
                   getProductUnit(matchedFormula.conversion.inputProductId) !== selectedProduct.unitType &&
-                  getProductUnit(matchedFormula.conversion.inputProductId) && (
+                  getProductUnit(matchedFormula.conversion.inputProductId) &&
+                  !(selectedProduct.unitType === "UNIT" && selectedProduct.packSizeQty) && (
                   <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800" data-testid="warning-unit-mismatch">
                     <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
                     <span>
