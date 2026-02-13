@@ -1,0 +1,187 @@
+You are in PLAN MODE. Do not start building until you have a tight plan that minimizes tool calls/credits. Goal: fix role-switch UI stale state, tighten permissions, add operational notes + admin validation, remove delete from clerks, then run a minimal regression test, and finally regenerate clean PDFs for admin/clerk manuals.
+
+A) Fix critical role-switch + stale UI/page issue (must fix)
+
+Problem observed:
+
+User logs out (Data Entry), logs in as Admin, and the first screen still shows Data Entry user’s “My History” state/data (pending edits etc) until user navigates to another page.
+
+Similarly, if Data Entry was last on Packouts, Admin lands on Packouts initially.
+Expected:
+
+After login, always land on Dashboard.
+
+After logout, clear all user-scoped UI state.
+
+After login, no previous user’s cached queries/components should render even briefly.
+
+Tasks:
+
+Identify auth/session flow in client (auth context + react-query/queryClient usage + router navigation).
+
+On login success:
+
+Clear react-query cache completely (queryClient.clear()).
+
+Reset any local auth state / user store.
+
+Force navigation to “/dashboard” (or home route) and replace history (navigate("/dashboard", { replace: true })).
+
+On logout success:
+
+Clear react-query cache completely.
+
+Clear any persisted client storage (localStorage/sessionStorage keys used by the app).
+
+Force navigation to login page and replace history.
+
+Fix route guards:
+
+Ensure admin-only routes redirect non-admin to "/" (or dashboard) immediately.
+
+Ensure the sidebar is re-rendered from fresh user state after login.
+
+Confirm “MyHistory” uses user-scoped API (only own pending requests). Ensure it does not display stale results across role changes.
+
+Deliverable:
+
+A short explanation of the root cause and exact code changes (files and functions).
+
+Confirm that after login the app always opens Dashboard and never renders previous user’s page/data.
+
+B) Remove ALL delete actions from Data Entry Clerks (backend + frontend)
+
+Requirement:
+
+Data Entry Clerks must not be able to delete anything. They can only create records and request edits.
+
+Tasks:
+
+Backend: ensure DELETE endpoints return 403 for DATA_ENTRY (intake/production/packout/etc).
+
+Frontend: remove/hide delete buttons/actions for DATA_ENTRY.
+
+Confirm admin can still delete if allowed (or keep delete admin-only).
+
+C) Add “Operational Notes” captured at entry time (Data Entry) + Admin validation notes
+
+Goal:
+
+When a Data Entry Clerk logs an intake/production/packout, they can add a short comment like “Spillage during transfer ~20L” or “Valve issue caused extra loss”.
+
+Admin can add a “review note” and mark a record as “Reviewed/Validated”.
+
+Implement in the cleanest way with auditability:
+
+Schema:
+
+Add nullable text column notes (or operatorNotes) to:
+
+daily_intakes
+
+production_line_items (or production records)
+
+packouts
+
+Add admin fields:
+
+reviewedAt timestamp nullable
+
+reviewedByUserId nullable FK
+
+adminNotes nullable text
+
+API:
+
+Allow notes on create for clerk (POST).
+
+For clerk edits: clerk cannot directly update notes after save; must submit change request (same workflow).
+
+Admin can set reviewed fields and admin notes via an admin-only endpoint:
+
+POST /api/admin/review (entityType, entityId, adminNotes, reviewed=true)
+
+UI:
+
+Intake modal: add “Notes (optional)” textarea.
+
+Production line item modal: add “Notes (optional)” textarea.
+
+Packout modal: add “Notes (optional)” textarea.
+
+Admin views (tables / detail modals): show the clerk notes + admin notes.
+
+Add Admin button “Mark as Reviewed” with optional admin note input.
+
+Audit logging:
+
+Ensure creating notes logs in event ledger.
+
+Ensure admin review action logs event ledger (REVIEW action or UPDATE fields).
+
+D) Minimal regression testing (credit-efficient)
+
+Only test what changed:
+
+Role-switch test:
+
+Log in Data Entry → go to MyHistory → logout → log in Admin.
+
+Expected: lands on Dashboard; MyHistory should not show Data Entry data; sidebar should show admin sections instantly.
+
+Delete lock test:
+
+Attempt DELETE as Data Entry via UI and direct API: confirm 403.
+
+Notes capture test:
+
+Create intake with notes (Data Entry).
+
+Create production line item with notes (Data Entry).
+
+Create packout with notes (Data Entry).
+
+Confirm notes persisted and visible to Admin.
+
+Admin review test:
+
+Admin adds admin note and marks reviewed; verify fields stored and event logged.
+
+Ensure change request system still works unchanged.
+
+Provide evidence: brief JSON/DB snippets or screenshots references, but keep it short.
+
+E) Documentation fixes + clean PDFs
+
+Issue:
+
+Previously generated PDFs have overlapping headings and tables cut off.
+
+Tasks:
+
+Open docs in /docs.
+
+Fix formatting for print:
+
+Use page breaks at major headings.
+
+Avoid wide tables: convert wide tables to multi-line bullet lists or split tables into smaller sections.
+
+Ensure consistent heading sizes and spacing.
+
+Regenerate 3 outputs:
+
+Admin Guide PDF
+
+Admin Quickstart PDF
+
+Data Entry Clerk Guide PDF
+All must be clean, readable, no clipping, no overlapping text.
+
+Output needed from you (before building):
+
+A concise plan with file list and schema changes.
+
+A very small set of test steps (as above).
+
+Then proceed to BUILD.
