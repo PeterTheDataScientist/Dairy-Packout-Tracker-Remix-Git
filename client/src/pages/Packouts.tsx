@@ -3,21 +3,26 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Plus, Package, Info } from "lucide-react";
+import { Plus, Package, Info, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import { format } from "date-fns";
 
 type Product = { id: number; name: string; category: string; unitType: string; active: boolean; packSizeQty: string | null; packSizeUnit: string | null; packSizeLabel: string | null };
-type Packout = { id: number; date: string; productId: number; qty: string; unitType: string; packSizeLabel: string | null; sourceProductId: number | null; sourceQtyUsed: string | null };
+type Packout = { id: number; date: string; productId: number; qty: string; unitType: string; packSizeLabel: string | null; sourceProductId: number | null; sourceQtyUsed: string | null; notes: string | null; reviewedAt: string | null; reviewedByUserId: number | null; adminNotes: string | null };
 
 export default function Packouts() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({ date: format(new Date(), "yyyy-MM-dd"), productId: "", qty: "", packSizeLabel: "", sourceProductId: "", sourceQtyUsed: "" });
+  const [reviewingItem, setReviewingItem] = useState<Packout | null>(null);
+  const [adminNotes, setAdminNotes] = useState("");
+  const [formData, setFormData] = useState({ date: format(new Date(), "yyyy-MM-dd"), productId: "", qty: "", packSizeLabel: "", sourceProductId: "", sourceQtyUsed: "", notes: "" });
 
   const { data: packouts = [] } = useQuery<Packout[]>({ queryKey: ["/api/packouts"] });
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
@@ -62,10 +67,23 @@ export default function Packouts() {
       queryClient.invalidateQueries({ queryKey: ["/api/packouts"] });
       toast({ title: "Packout Recorded", description: "Finished goods logged." });
       setIsDialogOpen(false);
-      setFormData({ date: format(new Date(), "yyyy-MM-dd"), productId: "", qty: "", packSizeLabel: "", sourceProductId: "", sourceQtyUsed: "" });
+      setFormData({ date: format(new Date(), "yyyy-MM-dd"), productId: "", qty: "", packSizeLabel: "", sourceProductId: "", sourceQtyUsed: "", notes: "" });
     },
     onError: (err: any) => {
       toast({ variant: "destructive", title: "Error", description: err.message });
+    },
+  });
+
+  const reviewMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("PATCH", "/api/admin/review", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/packouts"] });
+      toast({ title: "Reviewed", description: "Record marked as reviewed." });
+      setReviewingItem(null);
+      setAdminNotes("");
     },
   });
 
@@ -80,6 +98,7 @@ export default function Packouts() {
       packSizeLabel: formData.packSizeLabel || product?.packSizeLabel || null,
       sourceProductId: formData.sourceProductId ? parseInt(formData.sourceProductId) : null,
       sourceQtyUsed: formData.sourceQtyUsed || null,
+      notes: formData.notes || null,
     });
   };
 
@@ -136,6 +155,8 @@ export default function Packouts() {
               <TableHead>Pack Size</TableHead>
               <TableHead>Source</TableHead>
               <TableHead className="text-right">Source Used</TableHead>
+              <TableHead>Notes</TableHead>
+              {user?.role === "ADMIN" && <TableHead>Review</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -148,11 +169,29 @@ export default function Packouts() {
                 <TableCell className="text-muted-foreground text-sm">{p.packSizeLabel || "—"}</TableCell>
                 <TableCell className="text-muted-foreground text-sm">{p.sourceProductId ? getProductName(p.sourceProductId) : "—"}</TableCell>
                 <TableCell className="text-right text-muted-foreground text-sm">{p.sourceQtyUsed ? parseFloat(p.sourceQtyUsed).toLocaleString() : "—"}</TableCell>
+                <TableCell className="text-muted-foreground text-sm">
+                  {p.notes || "—"}
+                  {p.reviewedAt && <CheckCircle2 className="inline-block ml-1 h-3.5 w-3.5 text-green-500" />}
+                </TableCell>
+                {user?.role === "ADMIN" && (
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => { setReviewingItem(p); setAdminNotes(p.adminNotes || ""); }}
+                      data-testid={`button-review-packout-${p.id}`}
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                      Review
+                    </Button>
+                  </TableCell>
+                )}
               </TableRow>
             ))}
             {packouts.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No packouts recorded yet.</TableCell>
+                <TableCell colSpan={user?.role === "ADMIN" ? 9 : 8} className="text-center py-8 text-muted-foreground">No packouts recorded yet.</TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -235,6 +274,16 @@ export default function Packouts() {
                 </p>
               )}
             </div>
+            <div className="space-y-2">
+              <Label>Notes (optional)</Label>
+              <Textarea
+                placeholder="e.g. Spillage during transfer, valve issue..."
+                value={formData.notes}
+                onChange={e => setFormData({ ...formData, notes: e.target.value })}
+                rows={2}
+                data-testid="input-packout-notes"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
@@ -242,6 +291,48 @@ export default function Packouts() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {user?.role === "ADMIN" && (
+        <Dialog open={!!reviewingItem} onOpenChange={(open) => { if (!open) { setReviewingItem(null); setAdminNotes(""); } }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Review Packout Record</DialogTitle>
+              <DialogDescription>Add admin notes and mark this record as reviewed.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label>Admin Notes</Label>
+                <Textarea
+                  placeholder="Add review notes..."
+                  value={adminNotes}
+                  onChange={e => setAdminNotes(e.target.value)}
+                  rows={3}
+                  data-testid="input-admin-notes"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setReviewingItem(null); setAdminNotes(""); }}>Cancel</Button>
+              <Button
+                onClick={() => {
+                  if (reviewingItem) {
+                    reviewMutation.mutate({
+                      entityType: "PACKOUT",
+                      entityId: reviewingItem.id,
+                      adminNotes,
+                    });
+                  }
+                }}
+                disabled={reviewMutation.isPending}
+                data-testid="button-mark-reviewed"
+              >
+                <CheckCircle2 className="h-4 w-4 mr-1" />
+                Mark as Reviewed
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

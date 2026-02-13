@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import { Plus, ArrowRight, AlertTriangle, CheckCircle2, Beaker, Info, Pencil, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -21,7 +22,7 @@ type FormulaWithDetails = {
   conversion?: { inputProductId: number; ratioNumerator: string; ratioDenominator: string };
   components?: { componentProductId: number; fraction: string }[];
 };
-type LineItem = { id: number; batchCode: string; batchDate: string; operationType: string; outputProductId: number; outputQty: string; inputProductId: number | null; inputQty: string | null; createdByUserId?: number };
+type LineItem = { id: number; batchCode: string; batchDate: string; operationType: string; outputProductId: number; outputQty: string; inputProductId: number | null; inputQty: string | null; createdByUserId?: number; notes: string | null; reviewedAt: string | null; reviewedByUserId: number | null; adminNotes: string | null };
 
 export default function Production() {
   const { toast } = useToast();
@@ -35,6 +36,9 @@ export default function Production() {
   const [batchDate, setBatchDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [batchCode, setBatchCode] = useState(`B-${format(new Date(), "yyyyMMdd")}-${Math.floor(Math.random() * 1000)}`);
   const [blendActuals, setBlendActuals] = useState<Record<number, string>>({});
+  const [notes, setNotes] = useState("");
+  const [reviewingItem, setReviewingItem] = useState<LineItem | null>(null);
+  const [adminNotesInput, setAdminNotesInput] = useState("");
 
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
   const { data: formulas = [] } = useQuery<FormulaWithDetails[]>({ queryKey: ["/api/formulas"] });
@@ -193,6 +197,7 @@ export default function Production() {
           outputProductId: selectedProduct.id,
           outputQty,
           unitType: selectedProduct.unitType,
+          notes: notes || null,
         });
 
         if (operationType === "BLEND" && Object.keys(blendActuals).length > 0 && calculations?.components) {
@@ -253,6 +258,7 @@ export default function Production() {
     setOutputQty("");
     setActualInputQty("");
     setBlendActuals({});
+    setNotes("");
   };
 
   return (
@@ -276,7 +282,8 @@ export default function Production() {
               <TableHead>Product Made</TableHead>
               <TableHead className="text-right">Qty Produced</TableHead>
               <TableHead className="text-right">Raw Material Used</TableHead>
-              <TableHead className="w-[80px]"></TableHead>
+              <TableHead>Notes</TableHead>
+              <TableHead className="w-[100px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -296,25 +303,38 @@ export default function Production() {
                     </>
                   ) : "—"}
                 </TableCell>
+                <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate">
+                  <div className="flex items-center gap-1">
+                    {log.reviewedAt && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
+                    <span className="truncate">{log.notes || "—"}</span>
+                  </div>
+                </TableCell>
                 <TableCell>
-                  {canEditItem(log) && (
-                    <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1">
+                    {canEditItem(log) && (
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditDialog(log)} data-testid={`button-edit-production-${log.id}`}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      {user?.role === "ADMIN" && (
+                    )}
+                    {user?.role === "ADMIN" && (
+                      <>
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeletingItem(log)} data-testid={`button-delete-production-${log.id}`}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
-                      )}
-                    </div>
-                  )}
+                        {!log.reviewedAt && (
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-emerald-600" onClick={() => { setReviewingItem(log); setAdminNotesInput(""); }} data-testid={`button-review-production-${log.id}`}>
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
             {lineItems.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No production records yet.</TableCell>
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No production records yet.</TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -491,6 +511,19 @@ export default function Production() {
                 )}
               </>
             )}
+
+            {!editingItem && (
+              <div className="space-y-2">
+                <Label>Notes (optional)</Label>
+                <Textarea
+                  placeholder="e.g. Valve issue, extra loss observed..."
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  rows={2}
+                  data-testid="input-production-notes"
+                />
+              </div>
+            )}
           </div>
 
           <DialogFooter>
@@ -518,6 +551,60 @@ export default function Production() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!reviewingItem} onOpenChange={(open) => { if (!open) { setReviewingItem(null); setAdminNotesInput(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Review Production Record</DialogTitle>
+            <DialogDescription>
+              Mark this record as reviewed and optionally add admin notes.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {reviewingItem?.notes && (
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Operator Notes</Label>
+                <p className="text-sm bg-muted/50 p-2 rounded">{reviewingItem.notes}</p>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label>Admin Notes (optional)</Label>
+              <Textarea
+                placeholder="e.g. Verified quantities, all correct..."
+                value={adminNotesInput}
+                onChange={e => setAdminNotesInput(e.target.value)}
+                rows={2}
+                data-testid="input-admin-review-notes"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setReviewingItem(null); setAdminNotesInput(""); }}>Cancel</Button>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700"
+              onClick={async () => {
+                if (!reviewingItem) return;
+                try {
+                  await apiRequest("PATCH", "/api/admin/review", {
+                    entityType: "LINE_ITEM",
+                    entityId: reviewingItem.id,
+                    adminNotes: adminNotesInput || null,
+                  });
+                  queryClient.invalidateQueries({ queryKey: ["/api/production/line-items"] });
+                  toast({ title: "Reviewed", description: "Record marked as reviewed." });
+                  setReviewingItem(null);
+                  setAdminNotesInput("");
+                } catch (err: any) {
+                  toast({ variant: "destructive", title: "Error", description: err.message });
+                }
+              }}
+              data-testid="button-confirm-review"
+            >
+              Mark as Reviewed
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -3,21 +3,26 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Plus, Milk, Info } from "lucide-react";
+import { Plus, Milk, Info, CheckCircle2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/lib/auth";
 import { format } from "date-fns";
 
 type Product = { id: number; name: string; unitType: string; isIntermediate: boolean };
 type Supplier = { id: number; name: string; active: boolean };
-type Intake = { id: number; date: string; supplierId: number | null; productId: number; qty: string; unitType: string; deliveredQty: string | null; acceptedQty: string | null };
+type Intake = { id: number; date: string; supplierId: number | null; productId: number; qty: string; unitType: string; deliveredQty: string | null; acceptedQty: string | null; notes: string | null; reviewedAt: string | null; reviewedByUserId: number | null; adminNotes: string | null };
 
 export default function IntakePage() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [reviewingItem, setReviewingItem] = useState<Intake | null>(null);
+  const [adminNotes, setAdminNotes] = useState("");
   const [formData, setFormData] = useState({
     date: format(new Date(), "yyyy-MM-dd"),
     supplierId: "",
@@ -25,6 +30,7 @@ export default function IntakePage() {
     qty: "",
     deliveredQty: "",
     acceptedQty: "",
+    notes: "",
   });
 
   const { data: intakes = [] } = useQuery<Intake[]>({ queryKey: ["/api/intakes"] });
@@ -50,10 +56,23 @@ export default function IntakePage() {
       queryClient.invalidateQueries({ queryKey: ["/api/intakes"] });
       toast({ title: "Intake Recorded", description: "Delivery has been logged." });
       setIsDialogOpen(false);
-      setFormData({ date: format(new Date(), "yyyy-MM-dd"), supplierId: "", productId: "", qty: "", deliveredQty: "", acceptedQty: "" });
+      setFormData({ date: format(new Date(), "yyyy-MM-dd"), supplierId: "", productId: "", qty: "", deliveredQty: "", acceptedQty: "", notes: "" });
     },
     onError: (err: any) => {
       toast({ variant: "destructive", title: "Error", description: err.message });
+    },
+  });
+
+  const reviewMutation = useMutation({
+    mutationFn: async (data: any) => {
+      const res = await apiRequest("PATCH", "/api/admin/review", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/intakes"] });
+      toast({ title: "Reviewed", description: "Record marked as reviewed." });
+      setReviewingItem(null);
+      setAdminNotes("");
     },
   });
 
@@ -91,6 +110,7 @@ export default function IntakePage() {
       unitType: product?.unitType || "LITER",
       deliveredQty: formData.deliveredQty || null,
       acceptedQty: formData.acceptedQty || null,
+      notes: formData.notes || null,
     });
   };
 
@@ -121,6 +141,8 @@ export default function IntakePage() {
               <TableHead className="text-right">Accepted</TableHead>
               <TableHead className="text-right">Loss</TableHead>
               <TableHead>Unit</TableHead>
+              <TableHead>Notes</TableHead>
+              {user?.role === "ADMIN" && <TableHead>Review</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -143,12 +165,30 @@ export default function IntakePage() {
                     ) : "—"}
                   </TableCell>
                   <TableCell className="text-muted-foreground text-xs">{intake.unitType}</TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {intake.notes || "—"}
+                    {intake.reviewedAt && <CheckCircle2 className="inline-block ml-1 h-3.5 w-3.5 text-green-500" />}
+                  </TableCell>
+                  {user?.role === "ADMIN" && (
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => { setReviewingItem(intake); setAdminNotes(intake.adminNotes || ""); }}
+                        data-testid={`button-review-intake-${intake.id}`}
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                        Review
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               );
             })}
             {intakes.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No intake records yet.</TableCell>
+                <TableCell colSpan={user?.role === "ADMIN" ? 10 : 9} className="text-center py-8 text-muted-foreground">No intake records yet.</TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -223,6 +263,16 @@ export default function IntakePage() {
                 </p>
               )}
             </div>
+            <div className="space-y-2">
+              <Label>Notes (optional)</Label>
+              <Textarea
+                placeholder="e.g. Spillage during transfer, valve issue..."
+                value={formData.notes}
+                onChange={e => setFormData({ ...formData, notes: e.target.value })}
+                rows={2}
+                data-testid="input-intake-notes"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
@@ -230,6 +280,48 @@ export default function IntakePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {user?.role === "ADMIN" && (
+        <Dialog open={!!reviewingItem} onOpenChange={(open) => { if (!open) { setReviewingItem(null); setAdminNotes(""); } }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Review Intake Record</DialogTitle>
+              <DialogDescription>Add admin notes and mark this record as reviewed.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label>Admin Notes</Label>
+                <Textarea
+                  placeholder="Add review notes..."
+                  value={adminNotes}
+                  onChange={e => setAdminNotes(e.target.value)}
+                  rows={3}
+                  data-testid="input-admin-notes"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setReviewingItem(null); setAdminNotes(""); }}>Cancel</Button>
+              <Button
+                onClick={() => {
+                  if (reviewingItem) {
+                    reviewMutation.mutate({
+                      entityType: "INTAKE",
+                      entityId: reviewingItem.id,
+                      adminNotes,
+                    });
+                  }
+                }}
+                disabled={reviewMutation.isPending}
+                data-testid="button-mark-reviewed"
+              >
+                <CheckCircle2 className="h-4 w-4 mr-1" />
+                Mark as Reviewed
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
