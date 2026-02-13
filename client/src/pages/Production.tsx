@@ -302,9 +302,11 @@ export default function Production() {
                       <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditDialog(log)} data-testid={`button-edit-production-${log.id}`}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeletingItem(log)} data-testid={`button-delete-production-${log.id}`}>
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      {user?.role === "ADMIN" && (
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeletingItem(log)} data-testid={`button-delete-production-${log.id}`}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
                   )}
                 </TableCell>
