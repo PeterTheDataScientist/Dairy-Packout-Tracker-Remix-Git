@@ -122,9 +122,13 @@ export const dailyIntakes = pgTable("daily_intakes", {
   unitType: unitTypeEnum("unit_type").notNull(),
   createdByUserId: integer("created_by_user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  notes: text("notes"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedByUserId: integer("reviewed_by_user_id").references(() => users.id),
+  adminNotes: text("admin_notes"),
 });
 
-export const insertDailyIntakeSchema = createInsertSchema(dailyIntakes).omit({ id: true, createdAt: true });
+export const insertDailyIntakeSchema = createInsertSchema(dailyIntakes).omit({ id: true, createdAt: true, reviewedAt: true, reviewedByUserId: true, adminNotes: true });
 export type InsertDailyIntake = z.infer<typeof insertDailyIntakeSchema>;
 export type DailyIntake = typeof dailyIntakes.$inferSelect;
 
@@ -153,9 +157,13 @@ export const productionLineItems = pgTable("production_line_items", {
   unitType: unitTypeEnum("unit_type").notNull(),
   createdByUserId: integer("created_by_user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  notes: text("notes"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedByUserId: integer("reviewed_by_user_id").references(() => users.id),
+  adminNotes: text("admin_notes"),
 });
 
-export const insertProductionLineItemSchema = createInsertSchema(productionLineItems).omit({ id: true, createdAt: true });
+export const insertProductionLineItemSchema = createInsertSchema(productionLineItems).omit({ id: true, createdAt: true, reviewedAt: true, reviewedByUserId: true, adminNotes: true });
 export type InsertProductionLineItem = z.infer<typeof insertProductionLineItemSchema>;
 export type ProductionLineItem = typeof productionLineItems.$inferSelect;
 
@@ -170,9 +178,13 @@ export const packouts = pgTable("packouts", {
   sourceQtyUsed: decimal("source_qty_used", { precision: 12, scale: 4 }),
   createdByUserId: integer("created_by_user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
+  notes: text("notes"),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewedByUserId: integer("reviewed_by_user_id").references(() => users.id),
+  adminNotes: text("admin_notes"),
 });
 
-export const insertPackoutSchema = createInsertSchema(packouts).omit({ id: true, createdAt: true });
+export const insertPackoutSchema = createInsertSchema(packouts).omit({ id: true, createdAt: true, reviewedAt: true, reviewedByUserId: true, adminNotes: true });
 export type InsertPackout = z.infer<typeof insertPackoutSchema>;
 export type Packout = typeof packouts.$inferSelect;
 
