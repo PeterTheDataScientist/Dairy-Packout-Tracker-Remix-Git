@@ -17,13 +17,14 @@
 7. [Daily Operations: Production](#7-daily-operations-production)
 8. [Daily Operations: Packout](#8-daily-operations-packout)
 9. [Data Integrity Guardrails](#9-data-integrity-guardrails)
-10. [Auditing: Event Ledger and Change Requests](#10-auditing-event-ledger-and-change-requests)
-11. [Reports](#11-reports)
-12. [How to Detect Losses and Theft Patterns](#12-how-to-detect-losses-and-theft-patterns)
-13. [Known Ratio Assumptions (Current Formulas)](#13-known-ratio-assumptions-current-formulas)
-14. [Daily Admin Routine](#14-daily-admin-routine)
-15. [Weekly Admin Routine](#15-weekly-admin-routine)
-16. [Troubleshooting](#16-troubleshooting)
+10. [Operational Notes & Admin Review](#10-operational-notes--admin-review)
+11. [Auditing: Event Ledger and Change Requests](#11-auditing-event-ledger-and-change-requests)
+12. [Reports](#12-reports)
+13. [How to Detect Losses and Theft Patterns](#13-how-to-detect-losses-and-theft-patterns)
+14. [Known Ratio Assumptions (Current Formulas)](#14-known-ratio-assumptions-current-formulas)
+15. [Daily Admin Routine](#15-daily-admin-routine)
+16. [Weekly Admin Routine](#16-weekly-admin-routine)
+17. [Troubleshooting](#17-troubleshooting)
 
 ---
 
@@ -63,8 +64,10 @@ The system has exactly two roles:
 
 ### Data Entry Clerk
 - Can log Intake deliveries, Production batches, and Packouts
+- Can add optional operational notes when creating records
 - Can view their own entry history ("My History" page)
 - **Cannot** edit records after saving — must submit a Change Request
+- **Cannot** delete records — only Admins can delete
 - **Cannot** access admin-only pages: Products, Formulas, Approvals, Reports, Running Stock, Allocation, Loss Breakdown
 - **Cannot** manage users or suppliers
 
@@ -320,9 +323,54 @@ Without pack-size conversion, the system would incorrectly calculate 10 × 2 = 2
 
 ---
 
-## 10. Auditing: Event Ledger and Change Requests
+## 10. Operational Notes & Admin Review
 
-### 10.1 The Event Ledger
+### 10.1 Operational Notes (Data Entry)
+
+Data Entry Clerks can add an optional **notes** field when creating intake, production, or packout records. Notes are free-text and intended for explaining variances or recording observations from the factory floor.
+
+**Common note examples:**
+
+- "Spillage during transfer ~20L"
+- "Valve issue caused extra loss"
+- "Supplier delivered late, partial load"
+- "Scale re-calibrated mid-shift"
+
+Notes are saved with the record and **cannot be edited** after saving — the clerk must submit a Change Request to modify a note, just like any other field.
+
+### 10.2 Admin Review Workflow
+
+Admins can review records that have operational notes (or any record) using the **Mark as Reviewed** feature:
+
+1. Open the **Intake**, **Production**, or **Packouts** table
+2. Operational notes appear in the table alongside each record
+3. Click the **green checkmark icon** (✓) on any record to open the review dialog
+4. Optionally add **admin notes** (e.g., "Confirmed with supervisor", "Investigated — normal process loss")
+5. Click **"Mark as Reviewed"**
+
+Once reviewed:
+
+- The record displays a **green checkmark icon** (✓) indicating it has been reviewed
+- The review event is logged in the **Event Ledger** (audit trail) with the admin's name, timestamp, and any admin notes
+- The review status is permanent and visible to all users with access to the table
+
+### 10.3 Why Review Matters
+
+The review workflow provides a clear chain of accountability:
+
+- **Data Entry Clerks** record what happened and explain anomalies via notes
+- **Admins** verify the explanation and mark it as reviewed
+- The **Event Ledger** captures the full review history for auditing
+
+This is especially useful during investigations — you can quickly see which records have been reviewed and which still need attention.
+
+\newpage
+
+---
+
+## 11. Auditing: Event Ledger and Change Requests
+
+### 11.1 The Event Ledger
 
 Every significant action in the system creates an immutable event record. Events **cannot be deleted or modified** — they are permanent.
 
@@ -344,7 +392,7 @@ Each event records:
 
 **Why this matters:** The event ledger is your forensic tool. If numbers don't add up, you can trace exactly who changed what and when.
 
-### 10.2 Change Requests (Post-Save Edits)
+### 11.2 Change Requests (Post-Save Edits)
 
 **The problem:** Data Entry Clerks sometimes make mistakes. But allowing unrestricted editing would undermine the audit trail.
 
@@ -375,11 +423,11 @@ Each event records:
 
 ---
 
-## 11. Reports
+## 12. Reports
 
 All reports are Admin-only.
 
-### 11.1 Running Stock Report
+### 12.1 Running Stock Report
 
 **What it shows:** Daily running stock for two key material buckets:
 
@@ -398,7 +446,7 @@ All reports are Admin-only.
 
 [Screenshot: Running Stock Report]
 
-### 11.2 Daily Allocation Report
+### 12.2 Daily Allocation Report
 
 **What it shows:** How raw milk was distributed across product categories on a given day.
 
@@ -414,7 +462,7 @@ All reports are Admin-only.
 
 [Screenshot: Daily Allocation Report]
 
-### 11.3 Loss Breakdown Report
+### 12.3 Loss Breakdown Report
 
 **What it shows:** Four categories of loss across the production process:
 
@@ -435,7 +483,7 @@ All reports are Admin-only.
 
 ---
 
-## 12. How to Detect Losses and Theft Patterns
+## 13. How to Detect Losses and Theft Patterns
 
 ### The Four-Layer Loss Model
 
@@ -514,7 +562,7 @@ When you spot an anomaly:
 
 ---
 
-## 13. Known Ratio Assumptions (Current Formulas)
+## 14. Known Ratio Assumptions (Current Formulas)
 
 The following conversion ratios are currently configured. **All ratios are configurable** in the Formulas page and can be updated by an Admin at any time.
 
@@ -561,7 +609,7 @@ The following conversion ratios are currently configured. **All ratios are confi
 
 ---
 
-## 14. Daily Admin Routine
+## 15. Daily Admin Routine
 
 Perform these checks every working day, ideally at end of day or start of next day:
 
@@ -591,7 +639,7 @@ Perform these checks every working day, ideally at end of day or start of next d
 
 ---
 
-## 15. Weekly Admin Routine
+## 16. Weekly Admin Routine
 
 Perform these checks once per week (suggested: Monday morning for previous week).
 
@@ -625,7 +673,7 @@ Perform these checks once per week (suggested: Monday morning for previous week)
 
 ---
 
-## 16. Troubleshooting
+## 17. Troubleshooting
 
 ### "A Data Entry Clerk says they can't see admin pages"
 

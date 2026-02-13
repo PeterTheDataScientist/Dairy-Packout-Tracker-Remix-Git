@@ -73,6 +73,19 @@ Example: 10 units of 20L DTY = 200L → needs 400L Yogurt Base (2:1 ratio)
 
 ---
 
+## Reviewing Records with Notes
+
+Data Entry Clerks can add operational notes when creating records. To review:
+
+1. Open **Intake**, **Production**, or **Packouts** table
+2. Look for records with notes in the notes column
+3. Click the **green checkmark icon** (✓) on the record
+4. Add optional admin notes (e.g., "Confirmed with supervisor")
+5. Click **"Mark as Reviewed"** — a green ✓ appears on the record
+6. Review events are logged in the **Event Ledger**
+
+---
+
 ## When Something Looks Wrong
 
 1. Check **Data Gaps** — is input quantity missing?

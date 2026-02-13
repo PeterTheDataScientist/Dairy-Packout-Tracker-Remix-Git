@@ -14,11 +14,12 @@
 4. [How to Log an Intake (Delivery)](#4-how-to-log-an-intake-delivery)
 5. [How to Record Production](#5-how-to-record-production)
 6. [How to Log a Packout](#6-how-to-log-a-packout)
-7. [Using Search Dropdowns](#7-using-search-dropdowns)
-8. [Understanding Expected vs Actual and Variance](#8-understanding-expected-vs-actual-and-variance)
-9. [How to Request an Edit (Change Request)](#9-how-to-request-an-edit-change-request)
-10. [Do and Don't List](#10-do-and-dont-list)
-11. [End-of-Day Checklist](#11-end-of-day-checklist)
+7. [Adding Operational Notes](#7-adding-operational-notes)
+8. [Using Search Dropdowns](#8-using-search-dropdowns)
+9. [Understanding Expected vs Actual and Variance](#9-understanding-expected-vs-actual-and-variance)
+10. [How to Request an Edit (Change Request)](#10-how-to-request-an-edit-change-request)
+11. [Do and Don't List](#11-do-and-dont-list)
+12. [End-of-Day Checklist](#12-end-of-day-checklist)
 
 ---
 
@@ -34,10 +35,12 @@ You enter the numbers. The system does the math. An Admin reviews everything.
 
 **What you CAN do:**
 - Log intakes, production, and packouts
+- Add optional notes when creating records
 - View your own history
 - Request corrections to records you entered
 
 **What you CANNOT do:**
+- Delete records — only Admins can delete
 - Change products or formulas
 - View reports
 - Approve your own corrections
@@ -188,7 +191,33 @@ The form shows a suggested source quantity based on the product's pack size. Thi
 
 ---
 
-## 7. Using Search Dropdowns
+## 7. Adding Operational Notes
+
+When creating any record (intake, production, or packout), you can add an optional **note** to explain what happened. Notes are helpful for recording context that the numbers alone don't capture.
+
+### When to add a note:
+
+- When there was an unusual event (spillage, equipment issue, partial delivery)
+- When variance is higher than normal and you know why
+- When something needs Admin attention
+
+### Example notes:
+
+- "Spillage during transfer ~20L"
+- "Valve issue caused extra loss"
+- "Supplier delivered late, partial load — rest expected tomorrow"
+- "Scale re-calibrated mid-shift, readings before 10am may be slightly off"
+
+### Important rules about notes:
+
+- Notes are **optional** — you don't have to add one every time
+- Once saved, notes **cannot be edited** directly — you must submit a Change Request to change a note, just like any other field
+- Admins can see your notes in the tables and may review them
+- You **cannot delete records** — if you entered something by mistake, submit a Change Request or ask an Admin
+
+---
+
+## 8. Using Search Dropdowns
 
 Many fields use a **search dropdown** instead of a plain list. This makes it faster to find what you need.
 
@@ -211,7 +240,7 @@ Many fields use a **search dropdown** instead of a plain list. This makes it fas
 
 ---
 
-## 8. Understanding Expected vs Actual and Variance
+## 9. Understanding Expected vs Actual and Variance
 
 When you enter a production record, the system compares what you used to what the formula expected.
 
@@ -238,7 +267,7 @@ When you enter a production record, the system compares what you used to what th
 
 ---
 
-## 9. How to Request an Edit (Change Request)
+## 10. How to Request an Edit (Change Request)
 
 Once you save a record, you **cannot** directly change it. This is for security.
 
@@ -285,7 +314,7 @@ If you made a mistake, you request a correction. An Admin will review it.
 
 ---
 
-## 10. Do and Don't List
+## 11. Do and Don't List
 
 ### DO:
 
@@ -313,7 +342,7 @@ If you made a mistake, you request a correction. An Admin will review it.
 
 ---
 
-## 11. End-of-Day Checklist
+## 12. End-of-Day Checklist
 
 Before you finish your shift, go through this list:
 
