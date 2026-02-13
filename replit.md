@@ -50,10 +50,10 @@ Preferred communication style: Simple, everyday language.
 - **formulas** — id, name, type (CONVERSION | BLEND), outputProductId, inputBasis, active, version
 - **conversionFormulas** — formulaId, inputProductId, ratioNumerator, ratioDenominator
 - **blendComponents** — formulaId, componentProductId, fraction
-- **dailyIntakes** — date, supplierId, productId, qty, deliveredQty (optional), acceptedQty (optional), unitType
-- **productionBatches** / **productionLineItems** — batch tracking with operation types (CONVERT, BLEND)
+- **dailyIntakes** — date, supplierId, productId, qty, deliveredQty (optional), acceptedQty (optional), unitType, notes (optional), reviewedAt, reviewedByUserId, adminNotes
+- **productionBatches** / **productionLineItems** — batch tracking with operation types (CONVERT, BLEND); line items have notes, reviewedAt, reviewedByUserId, adminNotes
 - **blendActualUsage** — lineItemId, componentProductId, expectedQty, actualQty (tracks per-component actual usage in BLEND operations, CASCADE delete on line item)
-- **packouts** — date, productId, qty, unitType, packSizeLabel, sourceProductId (optional), sourceQtyUsed (optional)
+- **packouts** — date, productId, qty, unitType, packSizeLabel, sourceProductId (optional), sourceQtyUsed (optional), notes (optional), reviewedAt, reviewedByUserId, adminNotes
 - **events** — immutable audit ledger (actorUserId, entityType, entityId, action, fieldName, oldValue, newValue)
 - **changeRequests** — edit approval workflow (PENDING, APPROVED, REJECTED status)
 
