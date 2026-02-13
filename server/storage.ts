@@ -104,6 +104,9 @@ export interface IStorage {
   // Yield Tolerances
   getYieldTolerance(id: number): Promise<typeof yieldTolerances.$inferSelect | undefined>;
   updateYieldTolerance(id: number, updates: any): Promise<typeof yieldTolerances.$inferSelect | undefined>;
+
+  // Admin Review
+  adminReviewRecord(entityType: string, entityId: number, reviewedByUserId: number, adminNotes: string | null): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -283,6 +286,10 @@ export class DatabaseStorage implements IStorage {
         unitType: productionLineItems.unitType,
         createdByUserId: productionLineItems.createdByUserId,
         createdAt: productionLineItems.createdAt,
+        notes: productionLineItems.notes,
+        reviewedAt: productionLineItems.reviewedAt,
+        reviewedByUserId: productionLineItems.reviewedByUserId,
+        adminNotes: productionLineItems.adminNotes,
         batchCode: productionBatches.batchCode,
         batchDate: productionBatches.date,
       })
@@ -304,6 +311,10 @@ export class DatabaseStorage implements IStorage {
           unitType: productionLineItems.unitType,
           createdByUserId: productionLineItems.createdByUserId,
           createdAt: productionLineItems.createdAt,
+          notes: productionLineItems.notes,
+          reviewedAt: productionLineItems.reviewedAt,
+          reviewedByUserId: productionLineItems.reviewedByUserId,
+          adminNotes: productionLineItems.adminNotes,
           batchCode: productionBatches.batchCode,
           batchDate: productionBatches.date,
         })
@@ -465,6 +476,21 @@ export class DatabaseStorage implements IStorage {
   async updateYieldTolerance(id: number, updates: any) {
     const [updated] = await db.update(yieldTolerances).set(updates).where(eq(yieldTolerances.id, id)).returning();
     return updated;
+  }
+
+  async adminReviewRecord(entityType: string, entityId: number, reviewedByUserId: number, adminNotes: string | null) {
+    const reviewData = {
+      reviewedAt: new Date(),
+      reviewedByUserId,
+      adminNotes,
+    };
+    if (entityType === "INTAKE") {
+      await db.update(dailyIntakes).set(reviewData).where(eq(dailyIntakes.id, entityId));
+    } else if (entityType === "LINE_ITEM") {
+      await db.update(productionLineItems).set(reviewData).where(eq(productionLineItems.id, entityId));
+    } else if (entityType === "PACKOUT") {
+      await db.update(packouts).set(reviewData).where(eq(packouts.id, entityId));
+    }
   }
 }
 

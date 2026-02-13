@@ -832,6 +832,31 @@ export async function registerRoutes(
     res.status(400).json({ message: "Invalid status. Must be APPROVED or REJECTED" });
   });
 
+  // --- ADMIN REVIEW ---
+  app.patch("/api/admin/review", requireAuth, requireAdmin, async (req, res) => {
+    const { entityType, entityId, adminNotes } = req.body;
+    if (!entityType || !entityId) {
+      return res.status(400).json({ message: "entityType and entityId are required" });
+    }
+    if (!["INTAKE", "LINE_ITEM", "PACKOUT"].includes(entityType)) {
+      return res.status(400).json({ message: "entityType must be INTAKE, LINE_ITEM, or PACKOUT" });
+    }
+    await storage.adminReviewRecord(entityType, entityId, req.user!.id, adminNotes || null);
+    await storage.createEvent({
+      actorUserId: req.user!.id,
+      entityType,
+      entityId,
+      action: "REVIEW",
+      ipAddress: req.ip || null,
+      fieldName: "adminNotes",
+      oldValue: null,
+      newValue: adminNotes || null,
+      reason: null,
+      metadataJson: null,
+    });
+    res.json({ success: true });
+  });
+
   // --- AUDIT LOG ---
   app.get("/api/events", requireAdmin, async (req, res) => {
     const limit = parseInt(req.query.limit as string) || 100;
