@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -21,6 +21,15 @@ import LossBreakdown from "@/pages/LossBreakdown";
 import RunningStock from "@/pages/RunningStock";
 import Allocation from "@/pages/Allocation";
 import { Loader2 } from "lucide-react";
+import { ReactNode } from "react";
+
+function AdminRoute({ component: Component }: { component: React.ComponentType }) {
+  const { user } = useAuth();
+  if (user?.role !== "ADMIN") {
+    return <Redirect to="/" />;
+  }
+  return <Component />;
+}
 
 function AppRoutes() {
   const { user, isLoading } = useAuth();
@@ -44,15 +53,17 @@ function AppRoutes() {
         <Route path="/intake" component={Intake} />
         <Route path="/production" component={Production} />
         <Route path="/packouts" component={Packouts} />
-        <Route path="/reports" component={Reports} />
-        <Route path="/products" component={Products} />
-        <Route path="/formulas" component={Formulas} />
-        <Route path="/approvals" component={Approvals} />
-        <Route path="/suppliers" component={Suppliers} />
-        <Route path="/loss-breakdown" component={LossBreakdown} />
-        <Route path="/running-stock" component={RunningStock} />
-        <Route path="/allocation" component={Allocation} />
         <Route path="/my-history" component={MyHistory} />
+
+        <Route path="/reports">{() => <AdminRoute component={Reports} />}</Route>
+        <Route path="/products">{() => <AdminRoute component={Products} />}</Route>
+        <Route path="/formulas">{() => <AdminRoute component={Formulas} />}</Route>
+        <Route path="/approvals">{() => <AdminRoute component={Approvals} />}</Route>
+        <Route path="/suppliers">{() => <AdminRoute component={Suppliers} />}</Route>
+        <Route path="/loss-breakdown">{() => <AdminRoute component={LossBreakdown} />}</Route>
+        <Route path="/running-stock">{() => <AdminRoute component={RunningStock} />}</Route>
+        <Route path="/allocation">{() => <AdminRoute component={Allocation} />}</Route>
+
         <Route component={NotFound} />
       </Switch>
     </MainLayout>
