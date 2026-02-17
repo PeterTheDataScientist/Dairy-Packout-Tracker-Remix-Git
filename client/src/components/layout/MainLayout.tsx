@@ -31,6 +31,7 @@ import {
   Bell,
   Lock,
   Gauge,
+  Ruler,
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/lib/auth";
@@ -57,6 +58,7 @@ const routeTitles: Record<string, string> = {
   "/notifications": "Notifications",
   "/loss-thresholds": "Loss Thresholds",
   "/daily-locks": "Daily Locks",
+  "/custom-units": "Custom Units",
 };
 
 export function AppSidebar() {
@@ -92,6 +94,7 @@ export function AppSidebar() {
     { title: "Notifications", icon: Bell, path: "/notifications" },
     { title: "Loss Thresholds", icon: Gauge, path: "/loss-thresholds" },
     { title: "Daily Locks", icon: Lock, path: "/daily-locks" },
+    { title: "Custom Units", icon: Ruler, path: "/custom-units" },
   ];
 
   return (

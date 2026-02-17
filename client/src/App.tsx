@@ -23,6 +23,7 @@ import Allocation from "@/pages/Allocation";
 import Notifications from "@/pages/Notifications";
 import LossThresholds from "@/pages/LossThresholds";
 import DailyLocks from "@/pages/DailyLocks";
+import CustomUnits from "@/pages/CustomUnits";
 import { Loader2 } from "lucide-react";
 import { ReactNode } from "react";
 
@@ -69,6 +70,7 @@ function AppRoutes() {
         <Route path="/notifications">{() => <AdminRoute component={Notifications} />}</Route>
         <Route path="/loss-thresholds">{() => <AdminRoute component={LossThresholds} />}</Route>
         <Route path="/daily-locks">{() => <AdminRoute component={DailyLocks} />}</Route>
+        <Route path="/custom-units">{() => <AdminRoute component={CustomUnits} />}</Route>
 
         <Route component={NotFound} />
       </Switch>
