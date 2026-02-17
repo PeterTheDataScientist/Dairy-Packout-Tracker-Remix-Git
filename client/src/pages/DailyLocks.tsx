@@ -130,7 +130,7 @@ export default function DailyLocks() {
         </CardContent>
       </Card>
 
-      <div className="rounded-md border bg-card shadow-sm overflow-hidden">
+      <div className="rounded-md border bg-card shadow-sm overflow-hidden overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">

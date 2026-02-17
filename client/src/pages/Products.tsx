@@ -160,7 +160,7 @@ export default function Products() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Products</h2>
           <p className="text-muted-foreground">Manage your product catalog. {products.length} products across {usedCategories.length} categories.</p>
@@ -188,7 +188,7 @@ export default function Products() {
         </Select>
       </div>
 
-      <div className="rounded-md border bg-card shadow-sm overflow-hidden">
+      <div className="rounded-md border bg-card shadow-sm overflow-hidden overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">

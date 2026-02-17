@@ -153,7 +153,7 @@ export default function Packouts() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Packouts</h2>
           <p className="text-muted-foreground">Record finished goods inventory.</p>
@@ -205,7 +205,7 @@ export default function Packouts() {
         })}
       </div>
 
-      <div className="rounded-md border bg-card shadow-sm overflow-hidden">
+      <div className="rounded-md border bg-card shadow-sm overflow-hidden overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">

@@ -91,7 +91,7 @@ export default function MyHistory() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">My History</h2>
           <p className="text-muted-foreground">Review your captured data. Edits require approval.</p>
@@ -106,7 +106,7 @@ export default function MyHistory() {
 
       <div className="space-y-4">
         <h3 className="text-lg font-semibold">Intake Records</h3>
-        <div className="rounded-md border bg-card shadow-sm overflow-hidden">
+        <div className="rounded-md border bg-card shadow-sm overflow-hidden overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
@@ -150,7 +150,7 @@ export default function MyHistory() {
 
       <div className="space-y-4">
         <h3 className="text-lg font-semibold">Production Records</h3>
-        <div className="rounded-md border bg-card shadow-sm overflow-hidden">
+        <div className="rounded-md border bg-card shadow-sm overflow-hidden overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
@@ -197,7 +197,7 @@ export default function MyHistory() {
 
       <div className="space-y-4">
         <h3 className="text-lg font-semibold">Packout Records</h3>
-        <div className="rounded-md border bg-card shadow-sm overflow-hidden">
+        <div className="rounded-md border bg-card shadow-sm overflow-hidden overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">

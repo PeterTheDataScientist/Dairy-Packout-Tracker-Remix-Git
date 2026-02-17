@@ -81,7 +81,7 @@ export default function CustomUnits() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <h2 className="text-2xl font-bold tracking-tight" data-testid="text-custom-units-title">Custom Units</h2>
           <p className="text-muted-foreground">Add custom units of measure for products beyond the defaults (Litres, Kilograms, Units).</p>
@@ -91,7 +91,7 @@ export default function CustomUnits() {
         </Button>
       </div>
 
-      <div className="rounded-md border bg-card shadow-sm overflow-hidden">
+      <div className="rounded-md border bg-card shadow-sm overflow-hidden overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
