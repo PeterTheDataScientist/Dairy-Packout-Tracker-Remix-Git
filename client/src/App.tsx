@@ -20,6 +20,9 @@ import Suppliers from "@/pages/Suppliers";
 import LossBreakdown from "@/pages/LossBreakdown";
 import RunningStock from "@/pages/RunningStock";
 import Allocation from "@/pages/Allocation";
+import Notifications from "@/pages/Notifications";
+import LossThresholds from "@/pages/LossThresholds";
+import DailyLocks from "@/pages/DailyLocks";
 import { Loader2 } from "lucide-react";
 import { ReactNode } from "react";
 
@@ -63,6 +66,9 @@ function AppRoutes() {
         <Route path="/loss-breakdown">{() => <AdminRoute component={LossBreakdown} />}</Route>
         <Route path="/running-stock">{() => <AdminRoute component={RunningStock} />}</Route>
         <Route path="/allocation">{() => <AdminRoute component={Allocation} />}</Route>
+        <Route path="/notifications">{() => <AdminRoute component={Notifications} />}</Route>
+        <Route path="/loss-thresholds">{() => <AdminRoute component={LossThresholds} />}</Route>
+        <Route path="/daily-locks">{() => <AdminRoute component={DailyLocks} />}</Route>
 
         <Route component={NotFound} />
       </Switch>

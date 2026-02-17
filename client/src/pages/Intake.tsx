@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Plus, Milk, Info, CheckCircle2 } from "lucide-react";
+import { Plus, Milk, Info, CheckCircle2, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { format } from "date-fns";
@@ -23,6 +23,7 @@ export default function IntakePage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [reviewingItem, setReviewingItem] = useState<Intake | null>(null);
   const [adminNotes, setAdminNotes] = useState("");
+  const [intakeDate, setIntakeDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [formData, setFormData] = useState({
     date: format(new Date(), "yyyy-MM-dd"),
     supplierId: "",
@@ -31,6 +32,14 @@ export default function IntakePage() {
     deliveredQty: "",
     acceptedQty: "",
     notes: "",
+  });
+
+  const { data: dailyLock } = useQuery<any>({
+    queryKey: ["/api/daily-locks-intake", intakeDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/daily-locks/${intakeDate}`, { credentials: 'include' });
+      return res.json();
+    },
   });
 
   const { data: intakes = [] } = useQuery<Intake[]>({ queryKey: ["/api/intakes"] });
@@ -56,7 +65,9 @@ export default function IntakePage() {
       queryClient.invalidateQueries({ queryKey: ["/api/intakes"] });
       toast({ title: "Intake Recorded", description: "Delivery has been logged." });
       setIsDialogOpen(false);
-      setFormData({ date: format(new Date(), "yyyy-MM-dd"), supplierId: "", productId: "", qty: "", deliveredQty: "", acceptedQty: "", notes: "" });
+      const resetDate = format(new Date(), "yyyy-MM-dd");
+      setFormData({ date: resetDate, supplierId: "", productId: "", qty: "", deliveredQty: "", acceptedQty: "", notes: "" });
+      setIntakeDate(resetDate);
     },
     onError: (err: any) => {
       toast({ variant: "destructive", title: "Error", description: err.message });
@@ -124,10 +135,20 @@ export default function IntakePage() {
           <h2 className="text-2xl font-bold tracking-tight">Intake</h2>
           <p className="text-muted-foreground">Log raw material deliveries from suppliers.</p>
         </div>
-        <Button onClick={() => setIsDialogOpen(true)} className="gap-2" data-testid="button-add-intake">
+        <Button onClick={() => setIsDialogOpen(true)} className="gap-2" disabled={!!dailyLock} data-testid="button-add-intake">
           <Plus className="h-4 w-4" /> Log Delivery
         </Button>
       </div>
+
+      {dailyLock && (
+        <div className="flex items-start gap-2 p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800" data-testid="warning-locked">
+          <Lock className="h-5 w-5 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium">Day Locked</p>
+            <p className="text-sm">This date has been locked by admin. No changes allowed.</p>
+          </div>
+        </div>
+      )}
 
       <div className="rounded-md border bg-card shadow-sm overflow-hidden">
         <Table>
@@ -206,7 +227,7 @@ export default function IntakePage() {
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
               <Label>Date</Label>
-              <Input type="date" value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} data-testid="input-intake-date" />
+              <Input type="date" value={formData.date} onChange={e => { setFormData({ ...formData, date: e.target.value }); setIntakeDate(e.target.value); }} data-testid="input-intake-date" />
             </div>
             <div className="space-y-2">
               <Label>Supplier</Label>

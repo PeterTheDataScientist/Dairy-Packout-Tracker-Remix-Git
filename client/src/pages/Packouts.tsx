@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Plus, Package, Info, CheckCircle2 } from "lucide-react";
+import { Plus, Package, Info, CheckCircle2, Lock, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { format } from "date-fns";
@@ -24,8 +24,26 @@ export default function Packouts() {
   const [adminNotes, setAdminNotes] = useState("");
   const [formData, setFormData] = useState({ date: format(new Date(), "yyyy-MM-dd"), productId: "", qty: "", packSizeLabel: "", sourceProductId: "", sourceQtyUsed: "", notes: "" });
 
+  const [packoutDate, setPackoutDate] = useState(format(new Date(), "yyyy-MM-dd"));
+
   const { data: packouts = [] } = useQuery<Packout[]>({ queryKey: ["/api/packouts"] });
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
+
+  const { data: workflowCheck } = useQuery<{ allowed: boolean; reason?: string }>({
+    queryKey: ["/api/workflow/check-packout", packoutDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/workflow/check?date=${packoutDate}&step=packout`, { credentials: 'include' });
+      return res.json();
+    },
+  });
+
+  const { data: dailyLock } = useQuery<any>({
+    queryKey: ["/api/daily-locks-packout", packoutDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/daily-locks/${packoutDate}`, { credentials: 'include' });
+      return res.json();
+    },
+  });
 
   const finishedGoods = products.filter(p => p.category !== "RAW_MILK" && p.active);
   const getProductName = (id: number) => products.find(p => p.id === id)?.name || `#${id}`;
@@ -120,10 +138,30 @@ export default function Packouts() {
           <h2 className="text-2xl font-bold tracking-tight">Packouts</h2>
           <p className="text-muted-foreground">Record finished goods inventory.</p>
         </div>
-        <Button onClick={() => setIsDialogOpen(true)} className="gap-2" data-testid="button-add-packout">
+        <Button onClick={() => setIsDialogOpen(true)} className="gap-2" disabled={!!dailyLock || (workflowCheck && !workflowCheck.allowed)} data-testid="button-add-packout">
           <Plus className="h-4 w-4" /> Log Packout
         </Button>
       </div>
+
+      {dailyLock && (
+        <div className="flex items-start gap-2 p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800" data-testid="warning-locked">
+          <Lock className="h-5 w-5 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium">Day Locked</p>
+            <p className="text-sm">This date has been locked by admin. No changes allowed.</p>
+          </div>
+        </div>
+      )}
+
+      {workflowCheck && !workflowCheck.allowed && (
+        <div className="flex items-start gap-2 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800" data-testid="warning-workflow">
+          <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium">Cannot Record Packout</p>
+            <p className="text-sm">{workflowCheck.reason}</p>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-4">
         {finishedGoods.slice(0, 4).map(product => {
@@ -207,7 +245,7 @@ export default function Packouts() {
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
               <Label>Date</Label>
-              <Input type="date" value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} data-testid="input-packout-date" />
+              <Input type="date" value={formData.date} onChange={e => { setFormData({ ...formData, date: e.target.value }); setPackoutDate(e.target.value); }} data-testid="input-packout-date" />
             </div>
             <div className="space-y-2">
               <Label>Product</Label>

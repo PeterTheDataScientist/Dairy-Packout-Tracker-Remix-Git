@@ -28,12 +28,17 @@ import {
   TrendingDown,
   BarChart3,
   PieChart,
+  Bell,
+  Lock,
+  Gauge,
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { useQuery } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 const routeTitles: Record<string, string> = {
   "/": "Dashboard",
@@ -49,6 +54,9 @@ const routeTitles: Record<string, string> = {
   "/running-stock": "Running Stock",
   "/allocation": "Daily Allocation",
   "/my-history": "My History",
+  "/notifications": "Notifications",
+  "/loss-thresholds": "Loss Thresholds",
+  "/daily-locks": "Daily Locks",
 };
 
 export function AppSidebar() {
@@ -81,6 +89,9 @@ export function AppSidebar() {
     { title: "Formulas", icon: Settings, path: "/formulas" },
     { title: "Suppliers", icon: Truck, path: "/suppliers" },
     { title: "Approvals", icon: ShieldCheck, path: "/approvals" },
+    { title: "Notifications", icon: Bell, path: "/notifications" },
+    { title: "Loss Thresholds", icon: Gauge, path: "/loss-thresholds" },
+    { title: "Daily Locks", icon: Lock, path: "/daily-locks" },
   ];
 
   return (
@@ -164,8 +175,15 @@ export function AppSidebar() {
 
 export function MainLayout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
+  const { user } = useAuth();
   const pageTitle = routeTitles[location] || "Not Found";
   const isHome = location === "/";
+
+  const { data: notifCount } = useQuery<{ count: number }>({
+    queryKey: ["/api/notifications/count"],
+    enabled: user?.role === "ADMIN",
+    refetchInterval: 30000,
+  });
 
   return (
     <SidebarProvider>
@@ -201,7 +219,19 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
               </nav>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">System v1.0.4</span>
+              {user?.role === "ADMIN" && (
+                <Link href="/notifications">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 relative" data-testid="button-notifications">
+                    <Bell className="h-4 w-4" />
+                    {notifCount && notifCount.count > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 h-4 min-w-[16px] rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center px-1" data-testid="badge-notification-count">
+                        {notifCount.count}
+                      </span>
+                    )}
+                  </Button>
+                </Link>
+              )}
+              <span className="text-xs text-muted-foreground">System v1.0.5</span>
             </div>
           </header>
           <div className="flex-1 overflow-auto p-6 md:p-8">

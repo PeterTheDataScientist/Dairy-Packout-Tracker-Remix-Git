@@ -12,7 +12,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, ArrowRight, AlertTriangle, CheckCircle2, Beaker, Info, Pencil, Trash2 } from "lucide-react";
+import { Plus, ArrowRight, AlertTriangle, CheckCircle2, Beaker, Info, Pencil, Trash2, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
@@ -39,10 +39,35 @@ export default function Production() {
   const [notes, setNotes] = useState("");
   const [reviewingItem, setReviewingItem] = useState<LineItem | null>(null);
   const [adminNotesInput, setAdminNotesInput] = useState("");
+  const [remainingMilkInputs, setRemainingMilkInputs] = useState<Record<number, string>>({});
 
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
   const { data: formulas = [] } = useQuery<FormulaWithDetails[]>({ queryKey: ["/api/formulas"] });
   const { data: lineItems = [] } = useQuery<LineItem[]>({ queryKey: ["/api/production/line-items"] });
+
+  const { data: workflowCheck } = useQuery<{ allowed: boolean; reason?: string }>({
+    queryKey: ["/api/workflow/check", batchDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/workflow/check?date=${batchDate}&step=production`, { credentials: "include" });
+      return res.json();
+    },
+  });
+
+  const { data: batches = [] } = useQuery<any[]>({
+    queryKey: ["/api/production/batches", batchDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/production/batches?dateFrom=${batchDate}&dateTo=${batchDate}`, { credentials: "include" });
+      return res.json();
+    },
+  });
+
+  const { data: dailyLock } = useQuery<any>({
+    queryKey: ["/api/daily-locks", batchDate],
+    queryFn: async () => {
+      const res = await fetch(`/api/daily-locks/${batchDate}`, { credentials: "include" });
+      return res.json();
+    },
+  });
 
   const activeProducts = products.filter(p => p.active && p.category !== "RAW_MILK" && !p.isIntermediate);
 
@@ -157,6 +182,17 @@ export default function Production() {
     },
   });
 
+  const updateRemainingMutation = useMutation({
+    mutationFn: async ({ batchId, remainingRawMilk }: { batchId: number; remainingRawMilk: string }) => {
+      const res = await apiRequest("PATCH", `/api/production/batches/${batchId}/remaining`, { remainingRawMilk });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/production/batches"] });
+      toast({ title: "Remaining Milk Saved", description: "Your remaining raw milk figure has been recorded." });
+    },
+  });
+
   const saveBlendUsageMutation = useMutation({
     mutationFn: async ({ lineItemId, components }: { lineItemId: number; components: any[] }) => {
       const res = await apiRequest("POST", `/api/production/line-items/${lineItemId}/blend-usage`, { components });
@@ -268,10 +304,30 @@ export default function Production() {
           <h2 className="text-2xl font-bold tracking-tight" data-testid="text-production-title">Production</h2>
           <p className="text-muted-foreground">Record what was made today and how much raw material was used.</p>
         </div>
-        <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="gap-2" data-testid="button-add-production">
+        <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="gap-2" data-testid="button-add-production" disabled={(workflowCheck && !workflowCheck.allowed) || !!dailyLock}>
           <Plus className="h-4 w-4" /> Record Batch
         </Button>
       </div>
+
+      {dailyLock && (
+        <div className="flex items-start gap-2 p-4 rounded-lg bg-red-50 border border-red-200 text-red-800 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800" data-testid="warning-locked">
+          <Lock className="h-5 w-5 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium">Day Locked</p>
+            <p className="text-sm">This date has been locked by admin. No changes allowed.</p>
+          </div>
+        </div>
+      )}
+
+      {workflowCheck && !workflowCheck.allowed && (
+        <div className="flex items-start gap-2 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800" data-testid="warning-workflow">
+          <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-medium">Cannot Record Production</p>
+            <p className="text-sm">{workflowCheck.reason}</p>
+          </div>
+        </div>
+      )}
 
       <div className="rounded-md border bg-card shadow-sm overflow-hidden">
         <Table>
@@ -340,6 +396,72 @@ export default function Production() {
           </TableBody>
         </Table>
       </div>
+
+      {batches.filter((b: any) => !b.remainingRawMilk).length > 0 && (
+        <Card className="border-dashed">
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center gap-2">
+              <Beaker className="h-4 w-4 text-primary" />
+              <Label className="font-medium">Report Remaining Raw Milk</Label>
+            </div>
+            <p className="text-sm text-muted-foreground">How much raw milk is left after production? Enter the actual amount remaining in the tank.</p>
+            {batches.filter((b: any) => !b.remainingRawMilk).map((batch: any) => (
+              <div key={batch.id} className="flex items-center gap-3" data-testid={`remaining-milk-${batch.id}`}>
+                <span className="text-sm font-mono text-muted-foreground">{batch.batchCode}</span>
+                <Input
+                  type="number"
+                  placeholder="Remaining litres"
+                  value={remainingMilkInputs[batch.id] || ""}
+                  onChange={e => setRemainingMilkInputs(prev => ({ ...prev, [batch.id]: e.target.value }))}
+                  className="w-40"
+                  data-testid={`input-remaining-milk-${batch.id}`}
+                />
+                <span className="text-sm text-muted-foreground">Litres</span>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    const val = remainingMilkInputs[batch.id];
+                    if (val) updateRemainingMutation.mutate({ batchId: batch.id, remainingRawMilk: val });
+                  }}
+                  disabled={!remainingMilkInputs[batch.id] || updateRemainingMutation.isPending}
+                  data-testid={`button-save-remaining-${batch.id}`}
+                >
+                  Save
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {user?.role === "ADMIN" && batches.filter((b: any) => b.remainingRawMilk).length > 0 && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <Label className="font-medium text-sm">Remaining Milk Tracker</Label>
+            {batches.filter((b: any) => b.remainingRawMilk).map((batch: any) => {
+              const clerk = parseFloat(batch.remainingRawMilk);
+              const system = batch.systemCalculatedRemaining ? parseFloat(batch.systemCalculatedRemaining) : null;
+              const variance = system ? ((clerk - system) / system * 100) : null;
+              return (
+                <div key={batch.id} className="flex items-center gap-4 p-2 rounded bg-muted/50 text-sm" data-testid={`tracker-batch-${batch.id}`}>
+                  <span className="font-mono text-xs text-muted-foreground">{batch.batchCode}</span>
+                  <span>Clerk: <strong>{clerk.toFixed(1)}L</strong></span>
+                  {system !== null && (
+                    <>
+                      <span className="text-muted-foreground">System: {system.toFixed(1)}L</span>
+                      {variance !== null && (
+                        <Badge variant={Math.abs(variance) > 5 ? "destructive" : "secondary"} className="text-xs">
+                          {variance > 0 ? "+" : ""}{variance.toFixed(1)}%
+                        </Badge>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) resetForm(); setIsDialogOpen(open); }}>
         <DialogContent className="sm:max-w-[560px]">
@@ -530,7 +652,7 @@ export default function Production() {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => { resetForm(); setIsDialogOpen(false); }}>Cancel</Button>
-            <Button onClick={handleSave} disabled={!selectedProduct || !outputQty || createBatchMutation.isPending || updateLineItemMutation.isPending} data-testid="button-save-batch">
+            <Button onClick={handleSave} disabled={!selectedProduct || !outputQty || createBatchMutation.isPending || updateLineItemMutation.isPending || (workflowCheck && !workflowCheck.allowed) || !!dailyLock} data-testid="button-save-batch">
               {editingItem ? "Update" : "Save Batch"}
             </Button>
           </DialogFooter>
