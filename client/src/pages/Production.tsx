@@ -430,9 +430,11 @@ export default function Production() {
                         <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800">
                           {selectedProduct.name}
                         </Badge>
-                        <span className="text-xs text-muted-foreground ml-auto">
-                          {parseFloat(matchedFormula.conversion.ratioNumerator)}:{parseFloat(matchedFormula.conversion.ratioDenominator)}
-                        </span>
+                        {user?.role === "ADMIN" && (
+                          <span className="text-xs text-muted-foreground ml-auto">
+                            {parseFloat(matchedFormula.conversion.ratioNumerator)}:{parseFloat(matchedFormula.conversion.ratioDenominator)}
+                          </span>
+                        )}
                       </div>
 
                       <div className="space-y-2">
@@ -442,24 +444,24 @@ export default function Production() {
                         <div className="flex items-center gap-3">
                           <Input
                             type="number"
-                            placeholder={calculations?.expectedInput ? `Expected: ${calculations.expectedInput.toFixed(1)}` : "..."}
+                            placeholder={user?.role === "ADMIN" && calculations?.expectedInput ? `Expected: ${calculations.expectedInput.toFixed(1)}` : "0"}
                             value={actualInputQty}
                             onChange={e => setActualInputQty(e.target.value)}
-                            className={`flex-1 ${calculations?.variancePercent && Math.abs(calculations.variancePercent) > 5 ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                            className={`flex-1 ${user?.role === "ADMIN" && calculations?.variancePercent && Math.abs(calculations.variancePercent) > 5 ? "border-destructive focus-visible:ring-destructive" : ""}`}
                             data-testid="input-actual-input"
                           />
                           <span className="text-sm text-muted-foreground whitespace-nowrap">
                             {unitLabel(getProductUnit(matchedFormula.conversion.inputProductId))}
                           </span>
                         </div>
-                        {calculations?.expectedInput && (
+                        {user?.role === "ADMIN" && calculations?.expectedInput && (
                           <p className="text-xs text-muted-foreground">
                             Based on the formula, you should need about {calculations.expectedInput.toFixed(1)} {unitShort(getProductUnit(matchedFormula.conversion.inputProductId))}
                           </p>
                         )}
                       </div>
 
-                      {calculations?.variancePercent !== undefined && actualInputQty && (
+                      {user?.role === "ADMIN" && calculations?.variancePercent !== undefined && actualInputQty && (
                         <div className={`p-3 rounded-lg text-sm flex items-center gap-2 ${Math.abs(calculations.variancePercent) > 5 ? "bg-destructive/10 text-destructive" : "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400"}`}>
                           {Math.abs(calculations.variancePercent) > 5 ? <AlertTriangle className="h-4 w-4 shrink-0" /> : <CheckCircle2 className="h-4 w-4 shrink-0" />}
                           <div>
@@ -486,7 +488,7 @@ export default function Production() {
                         {calculations.components.map((c: any, i: number) => (
                           <div key={i} className="flex items-center gap-2 bg-background p-2 rounded border">
                             <span className="flex-1 text-xs">{getProductName(c.componentProductId)}</span>
-                            <span className="font-mono text-xs text-muted-foreground whitespace-nowrap">{c.expectedQty.toFixed(1)}</span>
+                            {user?.role === "ADMIN" && <span className="font-mono text-xs text-muted-foreground whitespace-nowrap">{c.expectedQty.toFixed(1)}</span>}
                             <Input
                               type="number"
                               placeholder="Actual"

@@ -139,7 +139,7 @@ export default function IntakePage() {
               <TableHead className="text-right">Stock Added</TableHead>
               <TableHead className="text-right">Delivered</TableHead>
               <TableHead className="text-right">Accepted</TableHead>
-              <TableHead className="text-right">Loss</TableHead>
+              {user?.role === "ADMIN" && <TableHead className="text-right">Loss</TableHead>}
               <TableHead>Unit</TableHead>
               <TableHead>Notes</TableHead>
               {user?.role === "ADMIN" && <TableHead>Review</TableHead>}
@@ -159,11 +159,13 @@ export default function IntakePage() {
                   <TableCell className="text-right font-medium">{parseFloat(intake.qty).toLocaleString()}</TableCell>
                   <TableCell className="text-right text-muted-foreground">{intake.deliveredQty ? parseFloat(intake.deliveredQty).toLocaleString() : "—"}</TableCell>
                   <TableCell className="text-right text-muted-foreground">{intake.acceptedQty ? parseFloat(intake.acceptedQty).toLocaleString() : "—"}</TableCell>
-                  <TableCell className="text-right">
-                    {hasLoss ? (
-                      <span className="text-amber-600 text-sm">{lossAmt.toFixed(0)} ({lossPct.toFixed(1)}%)</span>
-                    ) : "—"}
-                  </TableCell>
+                  {user?.role === "ADMIN" && (
+                    <TableCell className="text-right">
+                      {hasLoss ? (
+                        <span className="text-amber-600 text-sm">{lossAmt.toFixed(0)} ({lossPct.toFixed(1)}%)</span>
+                      ) : "—"}
+                    </TableCell>
+                  )}
                   <TableCell className="text-muted-foreground text-xs">{intake.unitType}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                     {intake.notes || "—"}
@@ -188,7 +190,7 @@ export default function IntakePage() {
             })}
             {intakes.length === 0 && (
               <TableRow>
-                <TableCell colSpan={user?.role === "ADMIN" ? 10 : 9} className="text-center py-8 text-muted-foreground">No intake records yet.</TableCell>
+                <TableCell colSpan={user?.role === "ADMIN" ? 10 : 8} className="text-center py-8 text-muted-foreground">No intake records yet.</TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -257,7 +259,7 @@ export default function IntakePage() {
                   Stock qty will be set to accepted qty: <strong>{parseFloat(formData.acceptedQty).toLocaleString()}</strong>
                 </div>
               )}
-              {receivingLoss && (
+              {user?.role === "ADMIN" && receivingLoss && (
                 <p className="text-xs text-amber-600" data-testid="text-receiving-loss">
                   Receiving loss: {receivingLoss.loss} ({receivingLoss.percent}%)
                 </p>

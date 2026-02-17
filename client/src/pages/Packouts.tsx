@@ -268,7 +268,7 @@ export default function Packouts() {
                 />
                 <p className="text-xs text-muted-foreground">How much bulk material was consumed to create this packout record (total, not per unit).</p>
               </div>
-              {fillingLoss && (
+              {user?.role === "ADMIN" && fillingLoss && (
                 <p className="text-xs text-amber-600" data-testid="text-filling-loss">
                   Filling loss: {fillingLoss.loss} ({fillingLoss.percent}%)
                 </p>
