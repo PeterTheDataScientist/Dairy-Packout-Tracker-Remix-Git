@@ -12,7 +12,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, ArrowRight, AlertTriangle, CheckCircle2, Beaker, Info, Pencil, Trash2, Lock } from "lucide-react";
+import { Plus, ArrowRight, AlertTriangle, CheckCircle2, Beaker, Info, Pencil, Trash2, Lock, Send, Clock, Check, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
@@ -192,6 +192,43 @@ export default function Production() {
       toast({ title: "Remaining Milk Saved", description: "Your remaining raw milk figure has been recorded." });
     },
   });
+
+  const batchIds = batches.map((b: any) => b.id);
+  const { data: allCarryForwards = [] } = useQuery<any[]>({
+    queryKey: ["/api/carry-forward"],
+    queryFn: async () => {
+      const res = await fetch(`/api/carry-forward`, { credentials: "include" });
+      return res.json();
+    },
+  });
+  const carryForwards = allCarryForwards.filter((cf: any) => batchIds.includes(cf.fromBatchId));
+
+  const createCarryForwardMutation = useMutation({
+    mutationFn: async (data: { fromBatchId: number; amountLitres: string }) => {
+      const res = await apiRequest("POST", "/api/carry-forward", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/carry-forward"] });
+      toast({ title: "Request Sent", description: "Your carry-forward request has been submitted for admin approval." });
+    },
+    onError: (err: any) => {
+      toast({ variant: "destructive", title: "Error", description: err.message });
+    },
+  });
+
+  const approveCarryForwardMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: "APPROVED" | "REJECTED" }) => {
+      const res = await apiRequest("PATCH", `/api/carry-forward/${id}`, { status });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/carry-forward"] });
+      toast({ title: "Updated", description: "Carry-forward request has been updated." });
+    },
+  });
+
+  const [carryForwardQty, setCarryForwardQty] = useState<Record<number, string>>({});
 
   const saveBlendUsageMutation = useMutation({
     mutationFn: async ({ lineItemId, components }: { lineItemId: number; components: any[] }) => {
@@ -459,6 +496,108 @@ export default function Production() {
                 </div>
               );
             })}
+          </CardContent>
+        </Card>
+      )}
+
+      {batches.filter((b: any) => b.remainingRawMilk && !carryForwards.some((cf: any) => cf.fromBatchId === b.id)).length > 0 && (
+        <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center gap-2">
+              <Send className="h-4 w-4 text-blue-600" />
+              <Label className="font-medium text-blue-900 dark:text-blue-300">Carry Forward Remaining Milk</Label>
+            </div>
+            <p className="text-sm text-blue-700 dark:text-blue-400">
+              Want to use leftover raw milk in the next batch? Submit a carry-forward request for admin approval.
+            </p>
+            {batches.filter((b: any) => b.remainingRawMilk && !carryForwards.some((cf: any) => cf.fromBatchId === b.id)).map((batch: any) => (
+              <div key={batch.id} className="space-y-2 p-3 rounded-lg bg-white dark:bg-background border" data-testid={`carry-forward-${batch.id}`}>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-mono text-xs text-muted-foreground">{batch.batchCode}</span>
+                  <span className="text-muted-foreground">|</span>
+                  <span>Remaining: <strong>{parseFloat(batch.remainingRawMilk).toFixed(1)}L</strong></span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="number"
+                    placeholder={`Up to ${parseFloat(batch.remainingRawMilk).toFixed(1)}L`}
+                    value={carryForwardQty[batch.id] || ""}
+                    onChange={e => setCarryForwardQty(prev => ({ ...prev, [batch.id]: e.target.value }))}
+                    className="w-40"
+                    data-testid={`input-carry-forward-qty-${batch.id}`}
+                  />
+                  <span className="text-sm text-muted-foreground">Litres</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1"
+                    onClick={() => {
+                      const qty = carryForwardQty[batch.id];
+                      if (qty) {
+                        createCarryForwardMutation.mutate({
+                          fromBatchId: batch.id,
+                          amountLitres: qty,
+                        });
+                      }
+                    }}
+                    disabled={!carryForwardQty[batch.id] || createCarryForwardMutation.isPending}
+                    data-testid={`button-carry-forward-${batch.id}`}
+                  >
+                    <Send className="h-3.5 w-3.5" /> Request
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {carryForwards.length > 0 && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <Label className="font-medium text-sm">Carry-Forward Requests</Label>
+            </div>
+            {carryForwards.map((cf: any) => (
+              <div key={cf.id} className="flex items-center gap-4 p-3 rounded-lg bg-muted/30 border text-sm" data-testid={`carry-forward-status-${cf.id}`}>
+                <span className="font-mono text-xs text-muted-foreground">{cf.fromBatchCode || `Batch #${cf.fromBatchId}`}</span>
+                <span>{parseFloat(cf.amountLitres).toFixed(1)}L</span>
+                <Badge
+                  variant={cf.status === "APPROVED" ? "default" : cf.status === "REJECTED" ? "destructive" : "secondary"}
+                  className={`text-xs ${cf.status === "APPROVED" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" : ""}`}
+                >
+                  {cf.status === "PENDING" && <Clock className="h-3 w-3 mr-1" />}
+                  {cf.status === "APPROVED" && <Check className="h-3 w-3 mr-1" />}
+                  {cf.status === "REJECTED" && <X className="h-3 w-3 mr-1" />}
+                  {cf.status}
+                </Badge>
+                {user?.role === "ADMIN" && cf.status === "PENDING" && (
+                  <div className="flex items-center gap-1 ml-auto">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                      onClick={() => approveCarryForwardMutation.mutate({ id: cf.id, status: "APPROVED" })}
+                      disabled={approveCarryForwardMutation.isPending}
+                      data-testid={`button-approve-cf-${cf.id}`}
+                    >
+                      <Check className="h-3 w-3" /> Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs gap-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+                      onClick={() => approveCarryForwardMutation.mutate({ id: cf.id, status: "REJECTED" })}
+                      disabled={approveCarryForwardMutation.isPending}
+                      data-testid={`button-reject-cf-${cf.id}`}
+                    >
+                      <X className="h-3 w-3" /> Reject
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}
