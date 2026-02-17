@@ -12,7 +12,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, ArrowRight, AlertTriangle, CheckCircle2, Beaker, Info, Pencil, Trash2, Lock, Send, Clock, Check, X } from "lucide-react";
+import { Plus, ArrowRight, AlertTriangle, CheckCircle2, Beaker, Info, Pencil, Trash2, Lock, Send, Clock, Check, X, Download, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
@@ -40,6 +40,8 @@ export default function Production() {
   const [reviewingItem, setReviewingItem] = useState<LineItem | null>(null);
   const [adminNotesInput, setAdminNotesInput] = useState("");
   const [remainingMilkInputs, setRemainingMilkInputs] = useState<Record<number, string>>({});
+  const [shift, setShift] = useState("");
+  const [showTemplates, setShowTemplates] = useState(false);
 
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
   const { data: formulas = [] } = useQuery<FormulaWithDetails[]>({ queryKey: ["/api/formulas"] });
@@ -67,6 +69,17 @@ export default function Production() {
       const res = await fetch(`/api/daily-locks/${batchDate}`, { credentials: "include" });
       return res.json();
     },
+  });
+
+  const { data: templates = [] } = useQuery<LineItem[]>({
+    queryKey: ["/api/production/line-items", "templates"],
+    queryFn: async () => {
+      const yesterday = format(new Date(Date.now() - 86400000), "yyyy-MM-dd");
+      const res = await fetch(`/api/production/line-items`, { credentials: "include" });
+      const all: LineItem[] = await res.json();
+      return all.filter(li => li.batchDate === yesterday);
+    },
+    enabled: showTemplates,
   });
 
   const activeProducts = products.filter(p => p.active && p.category !== "RAW_MILK" && !p.isIntermediate);
@@ -260,6 +273,7 @@ export default function Production() {
           date: batchDate,
           batchCode,
           notes: null,
+          ...(shift ? { shift } : {}),
         });
         const lineItem = await createLineItemMutation.mutateAsync({
           batchId: batch.id,
@@ -332,6 +346,36 @@ export default function Production() {
     setActualInputQty("");
     setBlendActuals({});
     setNotes("");
+    setShift("");
+  };
+
+  const exportCSV = () => {
+    const headers = ["Batch Code", "Date", "Operation", "Output Product", "Output Qty", "Input Product", "Input Qty", "Notes", "Status"];
+    const rows = lineItems.map(li => [
+      li.batchCode, li.batchDate, li.operationType,
+      getProductName(li.outputProductId), li.outputQty,
+      li.inputProductId ? getProductName(li.inputProductId) : "",
+      li.inputQty || "",
+      li.notes || "",
+      li.reviewedAt ? "Reviewed" : "Pending"
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `production-${batchDate}.csv`;
+    a.click();
+  };
+
+  const applyTemplate = (template: LineItem) => {
+    setSelectedProductId(String(template.outputProductId));
+    setOutputQty("");
+    setActualInputQty("");
+    setNotes("");
+    setBatchCode(`B-${format(new Date(), "yyyyMMdd")}-${Math.floor(Math.random() * 1000)}`);
+    setBatchDate(format(new Date(), "yyyy-MM-dd"));
+    setShowTemplates(false);
+    setIsDialogOpen(true);
   };
 
   return (
@@ -341,9 +385,38 @@ export default function Production() {
           <h2 className="text-2xl font-bold tracking-tight" data-testid="text-production-title">Production</h2>
           <p className="text-muted-foreground">Record what was made today and how much raw material was used.</p>
         </div>
-        <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="gap-2" data-testid="button-add-production" disabled={(workflowCheck && !workflowCheck.allowed) || !!dailyLock}>
-          <Plus className="h-4 w-4" /> Record Batch
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={exportCSV} data-testid="button-export-csv">
+            <Download className="h-4 w-4 mr-1" /> CSV
+          </Button>
+          <div className="relative">
+            <Button variant="outline" size="sm" onClick={() => setShowTemplates(!showTemplates)} data-testid="button-use-template">
+              <FileText className="h-4 w-4 mr-1" /> Use Template
+            </Button>
+            {showTemplates && (
+              <div className="absolute right-0 top-full mt-1 w-72 bg-popover border rounded-md shadow-lg z-50 p-2 space-y-1" data-testid="dropdown-templates">
+                <p className="text-xs text-muted-foreground px-2 py-1 font-medium">Yesterday's batches:</p>
+                {templates.length === 0 && (
+                  <p className="text-xs text-muted-foreground px-2 py-2">No batches from yesterday found.</p>
+                )}
+                {templates.map((t) => (
+                  <button
+                    key={t.id}
+                    className="w-full text-left px-2 py-1.5 rounded text-sm hover:bg-accent flex items-center justify-between"
+                    onClick={() => applyTemplate(t)}
+                    data-testid={`template-item-${t.id}`}
+                  >
+                    <span className="truncate">{getProductName(t.outputProductId)}</span>
+                    <span className="text-xs text-muted-foreground ml-2">{t.operationType}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="gap-2" data-testid="button-add-production" disabled={(workflowCheck && !workflowCheck.allowed) || !!dailyLock}>
+            <Plus className="h-4 w-4" /> Record Batch
+          </Button>
+        </div>
       </div>
 
       {dailyLock && (
@@ -382,7 +455,14 @@ export default function Production() {
           <TableBody>
             {lineItems.map((log) => (
               <TableRow key={log.id} data-testid={`row-production-${log.id}`}>
-                <TableCell className="font-medium font-mono text-xs">{log.batchCode}</TableCell>
+                <TableCell className="font-medium font-mono text-xs">
+                  <span>{log.batchCode}</span>
+                  {batches.find((b: any) => b.batchCode === log.batchCode)?.shift && (
+                    <Badge variant="outline" className="ml-1.5 text-[10px] py-0 px-1" data-testid={`badge-shift-${log.id}`}>
+                      {batches.find((b: any) => b.batchCode === log.batchCode)?.shift}
+                    </Badge>
+                  )}
+                </TableCell>
                 <TableCell>{log.batchDate}</TableCell>
                 <TableCell className="font-medium">{getProductName(log.outputProductId)}</TableCell>
                 <TableCell className="text-right font-medium">
@@ -625,6 +705,18 @@ export default function Production() {
                   <Label className="text-xs text-muted-foreground">Batch Code</Label>
                   <Input value={batchCode} onChange={e => setBatchCode(e.target.value)} className="font-mono text-sm" data-testid="input-batch-code" />
                 </div>
+              </div>
+            )}
+
+            {!editingItem && (
+              <div>
+                <Label>Shift</Label>
+                <select className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm" value={shift} onChange={e => setShift(e.target.value)} data-testid="select-shift">
+                  <option value="">No Shift</option>
+                  <option value="MORNING">Morning</option>
+                  <option value="AFTERNOON">Afternoon</option>
+                  <option value="NIGHT">Night</option>
+                </select>
               </div>
             )}
 

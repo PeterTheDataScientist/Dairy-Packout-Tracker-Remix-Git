@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Plus, Package, Info, CheckCircle2, Lock, AlertTriangle } from "lucide-react";
+import { Plus, Package, Info, CheckCircle2, Lock, AlertTriangle, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { format } from "date-fns";
@@ -47,6 +47,26 @@ export default function Packouts() {
 
   const finishedGoods = products.filter(p => p.category !== "RAW_MILK" && p.active);
   const getProductName = (id: number) => products.find(p => p.id === id)?.name || `#${id}`;
+
+  const exportCSV = () => {
+    const headers = ["Date", "Product", "Qty", "Pack Size", "Source Product", "Source Qty Used", "Notes", "Status"];
+    const rows = packouts.map((p: any) => [
+      p.date,
+      products.find((pr: any) => pr.id === p.productId)?.name || "",
+      p.qty,
+      p.packSizeLabel || "",
+      p.sourceProductId ? products.find((pr: any) => pr.id === p.sourceProductId)?.name || "" : "",
+      p.sourceQtyUsed || "",
+      p.notes || "",
+      p.reviewedAt ? "Reviewed" : "Pending"
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `packouts-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+  };
 
   const productOptions = useMemo(() =>
     finishedGoods.map(p => ({ value: String(p.id), label: `${p.name} (${p.unitType})` })).sort((a, b) => a.label.localeCompare(b.label)),
@@ -138,9 +158,12 @@ export default function Packouts() {
           <h2 className="text-2xl font-bold tracking-tight">Packouts</h2>
           <p className="text-muted-foreground">Record finished goods inventory.</p>
         </div>
-        <Button onClick={() => setIsDialogOpen(true)} className="gap-2" disabled={!!dailyLock || (workflowCheck && !workflowCheck.allowed)} data-testid="button-add-packout">
-          <Plus className="h-4 w-4" /> Log Packout
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={exportCSV} data-testid="button-export-csv"><Download className="h-4 w-4 mr-1" /> CSV</Button>
+          <Button onClick={() => setIsDialogOpen(true)} className="gap-2" disabled={!!dailyLock || (workflowCheck && !workflowCheck.allowed)} data-testid="button-add-packout">
+            <Plus className="h-4 w-4" /> Log Packout
+          </Button>
+        </div>
       </div>
 
       {dailyLock && (

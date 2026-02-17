@@ -109,7 +109,7 @@ export async function registerRoutes(
   // --- USERS (admin) ---
   app.get("/api/users", requireAdmin, async (_req, res) => {
     const list = await storage.getUsers();
-    res.json(list.map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role })));
+    res.json(list.map(u => ({ id: u.id, name: u.name, email: u.email, role: u.role, active: u.active })));
   });
 
   // --- SUPPLIERS ---
@@ -1578,6 +1578,412 @@ export async function registerRoutes(
 
     res.json({ breached: false, severity: "ok" });
   });
+
+  // --- DASHBOARD KPI STATS ---
+  app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
+    const today = new Date().toISOString().split("T")[0];
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
+    const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString().split("T")[0];
+
+    const intakesThisWeek = await storage.getDailyIntakes(weekAgo, today);
+    const intakesLastWeek = await storage.getDailyIntakes(twoWeeksAgo, weekAgo);
+    const lineItemsThisWeek = await storage.getAllLineItems(weekAgo, today);
+    const lineItemsLastWeek = await storage.getAllLineItems(twoWeeksAgo, weekAgo);
+    const packoutsThisWeek = await storage.getPackouts(weekAgo, today);
+    const packoutsLastWeek = await storage.getPackouts(twoWeeksAgo, weekAgo);
+
+    const totalIntakeThisWeek = intakesThisWeek.reduce((s, i) => s + parseFloat(i.qty), 0);
+    const totalIntakeLastWeek = intakesLastWeek.reduce((s, i) => s + parseFloat(i.qty), 0);
+    const totalOutputThisWeek = lineItemsThisWeek.reduce((s, l) => s + parseFloat(l.outputQty), 0);
+    const totalOutputLastWeek = lineItemsLastWeek.reduce((s, l) => s + parseFloat(l.outputQty), 0);
+    const totalPackedThisWeek = packoutsThisWeek.reduce((s, p) => s + parseFloat(p.qty), 0);
+    const totalPackedLastWeek = packoutsLastWeek.reduce((s, p) => s + parseFloat(p.qty), 0);
+
+    const allLineItems = await storage.getAllLineItems();
+    const unreviewedProduction = allLineItems.filter(l => !l.reviewedAt).length;
+    const allPackouts = await storage.getPackouts();
+    const unreviewedPackouts = allPackouts.filter(p => !p.reviewedAt).length;
+    const allIntakes = await storage.getDailyIntakes();
+    const unreviewedIntakes = allIntakes.filter(i => !i.reviewedAt).length;
+
+    const pendingCRs = await storage.getChangeRequests("PENDING");
+    const pendingCFs = await storage.getCarryForwardRequests("PENDING");
+
+    const todayIntakes = await storage.getDailyIntakes(today, today);
+    const todayLineItems = await storage.getAllLineItems(today, today);
+    const todayPackouts = await storage.getPackouts(today, today);
+    const todayIntakeTotal = todayIntakes.reduce((s, i) => s + parseFloat(i.qty), 0);
+    const todayOutputTotal = todayLineItems.reduce((s, l) => s + parseFloat(l.outputQty), 0);
+    const todayPackedTotal = todayPackouts.reduce((s, p) => s + parseFloat(p.qty), 0);
+
+    const trendPct = (current: number, previous: number) => {
+      if (previous === 0) return current > 0 ? 100 : 0;
+      return ((current - previous) / previous) * 100;
+    };
+
+    res.json({
+      today: { intake: todayIntakeTotal, production: todayOutputTotal, packed: todayPackedTotal },
+      thisWeek: { intake: totalIntakeThisWeek, production: totalOutputThisWeek, packed: totalPackedThisWeek },
+      trends: {
+        intake: trendPct(totalIntakeThisWeek, totalIntakeLastWeek),
+        production: trendPct(totalOutputThisWeek, totalOutputLastWeek),
+        packed: trendPct(totalPackedThisWeek, totalPackedLastWeek),
+      },
+      unreviewed: { production: unreviewedProduction, packouts: unreviewedPackouts, intakes: unreviewedIntakes },
+      pending: { changeRequests: pendingCRs.length, carryForwards: pendingCFs.length },
+    });
+  });
+
+  // --- ENHANCED MASS BALANCE ---
+  app.get("/api/reports/mass-balance-enhanced", requireAdmin, async (req, res) => {
+    const { dateFrom, dateTo } = req.query;
+    const df = dateFrom as string || new Date(Date.now() - 30 * 86400000).toISOString().split("T")[0];
+    const dt = dateTo as string || new Date().toISOString().split("T")[0];
+
+    const allProducts = await storage.getProducts();
+    const rawMilkIds = new Set(allProducts.filter(p => p.category === "RAW_MILK").map(p => p.id));
+    const productMap = new Map(allProducts.map(p => [p.id, p]));
+
+    const intakes = await storage.getDailyIntakes(df, dt);
+    const lineItems = await storage.getAllLineItems(df, dt);
+    const packs = await storage.getPackouts(df, dt);
+
+    const milkIn = intakes.filter(i => rawMilkIds.has(i.productId)).reduce((s, i) => s + parseFloat(i.qty), 0);
+    const receivingLoss = intakes.filter(i => i.deliveredQty && i.acceptedQty).reduce((s, i) => s + (parseFloat(i.deliveredQty!) - parseFloat(i.acceptedQty!)), 0);
+
+    const productionInputUsed = lineItems.filter(l => l.inputQty && l.inputProductId && rawMilkIds.has(l.inputProductId)).reduce((s, l) => s + parseFloat(l.inputQty!), 0);
+
+    const productionOutput = lineItems.reduce((s, l) => s + parseFloat(l.outputQty), 0);
+    const productionLoss = productionInputUsed - productionOutput;
+
+    const totalPacked = packs.reduce((s, p) => s + parseFloat(p.qty), 0);
+    const packingLoss = packs.filter(p => p.sourceQtyUsed).reduce((s, p) => s + (parseFloat(p.sourceQtyUsed!) - parseFloat(p.qty)), 0);
+
+    const categoryBreakdown: Record<string, { produced: number; packed: number }> = {};
+    for (const li of lineItems) {
+      const prod = productMap.get(li.outputProductId);
+      const cat = prod?.category || "OTHER";
+      if (!categoryBreakdown[cat]) categoryBreakdown[cat] = { produced: 0, packed: 0 };
+      categoryBreakdown[cat].produced += parseFloat(li.outputQty);
+    }
+    for (const p of packs) {
+      const prod = productMap.get(p.productId);
+      const cat = prod?.category || "OTHER";
+      if (!categoryBreakdown[cat]) categoryBreakdown[cat] = { produced: 0, packed: 0 };
+      categoryBreakdown[cat].packed += parseFloat(p.qty);
+    }
+
+    res.json({
+      dateFrom: df, dateTo: dt,
+      milkIn, receivingLoss,
+      productionInputUsed, productionOutput, productionLoss,
+      totalPacked, packingLoss,
+      totalLoss: receivingLoss + productionLoss + packingLoss,
+      lossPercent: milkIn > 0 ? ((receivingLoss + productionLoss + packingLoss) / milkIn * 100) : 0,
+      categoryBreakdown,
+    });
+  });
+
+  // --- DAILY SUMMARY ---
+  app.get("/api/reports/daily-summary", requireAdmin, async (req, res) => {
+    const date = (req.query.date as string) || new Date().toISOString().split("T")[0];
+
+    const allProducts = await storage.getProducts();
+    const productMap = new Map(allProducts.map(p => [p.id, p]));
+    const rawMilkIds = new Set(allProducts.filter(p => p.category === "RAW_MILK").map(p => p.id));
+
+    const intakes = await storage.getDailyIntakes(date, date);
+    const lineItems = await storage.getAllLineItems(date, date);
+    const packs = await storage.getPackouts(date, date);
+    const batches = await storage.getProductionBatches(date, date);
+    const lock = await storage.getDailyLock(date);
+    const notifications = await storage.getAdminNotifications();
+    const dayNotifications = notifications.filter(n => {
+      const nDate = new Date(n.createdAt).toISOString().split("T")[0];
+      return nDate === date;
+    });
+
+    const totalIntake = intakes.filter(i => rawMilkIds.has(i.productId)).reduce((s, i) => s + parseFloat(i.qty), 0);
+    const totalProduced = lineItems.reduce((s, l) => s + parseFloat(l.outputQty), 0);
+    const totalPacked = packs.reduce((s, p) => s + parseFloat(p.qty), 0);
+    const unreviewedItems = lineItems.filter(l => !l.reviewedAt).length + packs.filter(p => !p.reviewedAt).length + intakes.filter(i => !i.reviewedAt).length;
+
+    const productionByCategory: Record<string, { qty: number; items: number }> = {};
+    for (const li of lineItems) {
+      const cat = productMap.get(li.outputProductId)?.category || "OTHER";
+      if (!productionByCategory[cat]) productionByCategory[cat] = { qty: 0, items: 0 };
+      productionByCategory[cat].qty += parseFloat(li.outputQty);
+      productionByCategory[cat].items++;
+    }
+
+    const intakeDetails = intakes.map(i => ({
+      supplier: i.supplierId,
+      product: productMap.get(i.productId)?.name || "Unknown",
+      qty: parseFloat(i.qty),
+      deliveredQty: i.deliveredQty ? parseFloat(i.deliveredQty) : null,
+      acceptedQty: i.acceptedQty ? parseFloat(i.acceptedQty) : null,
+    }));
+
+    const packoutDetails = packs.map(p => ({
+      product: productMap.get(p.productId)?.name || "Unknown",
+      qty: parseFloat(p.qty),
+      packSize: p.packSizeLabel,
+    }));
+
+    res.json({
+      date, isLocked: !!lock,
+      totalIntake, totalProduced, totalPacked,
+      batchCount: batches.length,
+      unreviewedItems,
+      alerts: dayNotifications.length,
+      alertDetails: dayNotifications.map(n => ({ type: n.type, title: n.title, message: n.message, severity: n.severity })),
+      productionByCategory,
+      intakeDetails,
+      packoutDetails,
+    });
+  });
+
+  // --- USER MANAGEMENT ---
+  app.post("/api/users", requireAdmin, async (req, res) => {
+    const { name, email, password, role } = req.body;
+    if (!name || !email || !password) return res.status(400).json({ message: "Name, email, and password are required" });
+    const existing = await storage.getUserByEmail(email);
+    if (existing) return res.status(409).json({ message: "Email already in use" });
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await storage.createUser({ name, email, passwordHash, role: role || "DATA_ENTRY", active: true });
+    res.status(201).json({ id: user.id, name: user.name, email: user.email, role: user.role, active: user.active });
+  });
+
+  app.patch("/api/users/:id", requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const updates: any = {};
+    if (req.body.name) updates.name = req.body.name;
+    if (req.body.email) updates.email = req.body.email;
+    if (req.body.role) updates.role = req.body.role;
+    if (typeof req.body.active === "boolean") updates.active = req.body.active;
+    const updated = await storage.updateUser(id, updates);
+    if (!updated) return res.status(404).json({ message: "User not found" });
+    res.json({ id: updated.id, name: updated.name, email: updated.email, role: updated.role, active: updated.active });
+  });
+
+  app.post("/api/users/:id/reset-password", requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 6) return res.status(400).json({ message: "Password must be at least 6 characters" });
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const updated = await storage.updateUser(id, { passwordHash });
+    if (!updated) return res.status(404).json({ message: "User not found" });
+    res.json({ message: "Password reset successfully" });
+  });
+
+  // --- AUDIT LOG SEARCH ---
+  app.get("/api/events/search", requireAdmin, async (req, res) => {
+    const { entityType, action, userId, dateFrom, dateTo, limit: limitStr } = req.query;
+    const limit = limitStr ? parseInt(limitStr as string) : 100;
+    let allEvents = await storage.getEvents(500);
+
+    if (entityType) allEvents = allEvents.filter(e => e.entityType === entityType);
+    if (action) allEvents = allEvents.filter(e => e.action === action);
+    if (userId) allEvents = allEvents.filter(e => e.actorUserId === parseInt(userId as string));
+    if (dateFrom) allEvents = allEvents.filter(e => new Date(e.timestamp) >= new Date(dateFrom as string));
+    if (dateTo) {
+      const dt = new Date(dateTo as string);
+      dt.setDate(dt.getDate() + 1);
+      allEvents = allEvents.filter(e => new Date(e.timestamp) < dt);
+    }
+
+    const usersList = await storage.getUsers();
+    const userMap = new Map(usersList.map(u => [u.id, u.name]));
+
+    const enriched = allEvents.slice(0, limit).map(e => ({
+      ...e,
+      actorName: userMap.get(e.actorUserId) || "Unknown",
+    }));
+
+    res.json(enriched);
+  });
+
+  // --- SUPPLIER SCORECARD ---
+  app.get("/api/reports/supplier-scorecard", requireAdmin, async (req, res) => {
+    const suppliersList = await storage.getSuppliers();
+    const allIntakesForScorecard = await storage.getDailyIntakes();
+
+    const scorecards = suppliersList.map(s => {
+      const deliveries = allIntakesForScorecard.filter(i => i.supplierId === s.id);
+      const totalDeliveries = deliveries.length;
+      const totalQty = deliveries.reduce((sum, d) => sum + parseFloat(d.qty), 0);
+
+      let totalDeliveredQty = 0;
+      let totalAcceptedQty = 0;
+      let deliveriesWithLoss = 0;
+
+      for (const d of deliveries) {
+        if (d.deliveredQty) totalDeliveredQty += parseFloat(d.deliveredQty);
+        if (d.acceptedQty) totalAcceptedQty += parseFloat(d.acceptedQty);
+        if (d.deliveredQty && d.acceptedQty && parseFloat(d.deliveredQty) > parseFloat(d.acceptedQty)) {
+          deliveriesWithLoss++;
+        }
+      }
+
+      const receivingLoss = totalDeliveredQty > 0 ? ((totalDeliveredQty - totalAcceptedQty) / totalDeliveredQty * 100) : 0;
+      const lossFrequency = totalDeliveries > 0 ? (deliveriesWithLoss / totalDeliveries * 100) : 0;
+
+      const uniqueDates = new Set(deliveries.map(d => d.date));
+
+      return {
+        id: s.id, name: s.name, active: s.active,
+        totalDeliveries, totalQty,
+        avgDeliveryQty: totalDeliveries > 0 ? totalQty / totalDeliveries : 0,
+        receivingLossPercent: receivingLoss,
+        lossFrequencyPercent: lossFrequency,
+        deliveryDays: uniqueDates.size,
+      };
+    });
+
+    res.json(scorecards);
+  });
+
+  // --- YIELD TRENDS ---
+  app.get("/api/reports/yield-trends", requireAdmin, async (req, res) => {
+    const allLineItemsForTrends = await storage.getAllLineItems();
+    const allFormulas = await storage.getFormulas();
+    const allProducts = await storage.getProducts();
+    const productMap = new Map(allProducts.map(p => [p.id, p]));
+
+    const weeklyData: Record<string, Record<number, { totalInput: number; totalOutput: number; count: number }>> = {};
+
+    for (const li of allLineItemsForTrends) {
+      if (li.operationType !== "CONVERT" || !li.inputQty || !li.formulaId) continue;
+      const date = new Date(li.batchDate);
+      const weekStart = new Date(date);
+      weekStart.setDate(date.getDate() - date.getDay());
+      const weekKey = weekStart.toISOString().split("T")[0];
+
+      if (!weeklyData[weekKey]) weeklyData[weekKey] = {};
+      if (!weeklyData[weekKey][li.formulaId]) weeklyData[weekKey][li.formulaId] = { totalInput: 0, totalOutput: 0, count: 0 };
+
+      weeklyData[weekKey][li.formulaId].totalInput += parseFloat(li.inputQty);
+      weeklyData[weekKey][li.formulaId].totalOutput += parseFloat(li.outputQty);
+      weeklyData[weekKey][li.formulaId].count++;
+    }
+
+    const trends = allFormulas.filter(f => f.type === "CONVERSION" && f.active).map(f => {
+      const outputProduct = productMap.get(f.outputProductId);
+      const weeks = Object.entries(weeklyData)
+        .filter(([_, data]) => data[f.id])
+        .map(([week, data]) => {
+          const d = data[f.id];
+          return {
+            week,
+            yieldPercent: d.totalInput > 0 ? (d.totalOutput / d.totalInput * 100) : 0,
+            batchCount: d.count,
+            totalInput: d.totalInput,
+            totalOutput: d.totalOutput,
+          };
+        })
+        .sort((a, b) => a.week.localeCompare(b.week));
+
+      return {
+        formulaId: f.id, formulaName: f.name,
+        outputProduct: outputProduct?.name || "Unknown",
+        weeks,
+      };
+    }).filter(t => t.weeks.length > 0);
+
+    res.json(trends);
+  });
+
+  // --- ACTIVITY LOG ---
+  app.get("/api/reports/activity-log", requireAdmin, async (req, res) => {
+    const { dateFrom, dateTo } = req.query;
+    const df = dateFrom as string || new Date().toISOString().split("T")[0];
+    const dt = dateTo as string || new Date().toISOString().split("T")[0];
+
+    const allUsers = await storage.getUsers();
+    const intakes = await storage.getDailyIntakes(df, dt);
+    const lineItems = await storage.getAllLineItems(df, dt);
+    const packoutsForLog = await storage.getPackouts(df, dt);
+    const eventsForLog = await storage.getEvents(1000);
+
+    const filteredEvents = eventsForLog.filter(e => {
+      const eDate = new Date(e.timestamp).toISOString().split("T")[0];
+      return eDate >= df && eDate <= dt;
+    });
+
+    const userActivity = allUsers.map(u => {
+      const userIntakes = intakes.filter(i => i.createdByUserId === u.id);
+      const userLineItems = lineItems.filter(l => l.createdByUserId === u.id);
+      const userPackouts = packoutsForLog.filter(p => p.createdByUserId === u.id);
+      const userEvents = filteredEvents.filter(e => e.actorUserId === u.id);
+
+      const lastActivity = userEvents.length > 0 ? userEvents[0].timestamp : null;
+
+      return {
+        id: u.id, name: u.name, email: u.email, role: u.role, active: u.active,
+        intakesCreated: userIntakes.length,
+        batchesCreated: userLineItems.length,
+        packoutsCreated: userPackouts.length,
+        totalRecords: userIntakes.length + userLineItems.length + userPackouts.length,
+        totalEvents: userEvents.length,
+        lastActivity,
+      };
+    });
+
+    res.json(userActivity);
+  });
+
+  // --- PHOTO UPLOAD ---
+  app.post("/api/production/batches/:id/photo", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const batch = await storage.getProductionBatch(id);
+    if (!batch) return res.status(404).json({ message: "Batch not found" });
+
+    const { photoData } = req.body;
+    if (!photoData) return res.status(400).json({ message: "No photo data provided" });
+
+    const fs = await import("fs");
+    const path = await import("path");
+    const uploadsDir = path.join(process.cwd(), "uploads");
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+    const fileName = `batch-${id}-${Date.now()}.jpg`;
+    const filePath = path.join(uploadsDir, fileName);
+    const base64Data = photoData.replace(/^data:image\/\w+;base64,/, "");
+    fs.writeFileSync(filePath, base64Data, "base64");
+
+    const photoUrl = `/uploads/${fileName}`;
+    await storage.updateProductionBatch(id, { photoUrl });
+
+    res.json({ photoUrl });
+  });
+
+  // --- BATCH TEMPLATES ---
+  app.get("/api/production/templates", requireAuth, async (req, res) => {
+    const { date } = req.query;
+    const targetDate = date as string || new Date(Date.now() - 86400000).toISOString().split("T")[0];
+    const lineItems = await storage.getAllLineItems(targetDate, targetDate);
+    const allProducts = await storage.getProducts();
+    const productMap = new Map(allProducts.map(p => [p.id, p]));
+
+    const templates = lineItems.map(li => ({
+      outputProductId: li.outputProductId,
+      outputProductName: productMap.get(li.outputProductId)?.name || "Unknown",
+      outputQty: li.outputQty,
+      inputProductId: li.inputProductId,
+      inputProductName: li.inputProductId ? productMap.get(li.inputProductId)?.name || "Unknown" : null,
+      operationType: li.operationType,
+      formulaId: li.formulaId,
+      batchCode: li.batchCode,
+    }));
+
+    res.json(templates);
+  });
+
+  // --- STATIC UPLOADS ---
+  const expressModule = await import("express");
+  const pathModule = await import("path");
+  const uploadsPath = pathModule.join(process.cwd(), "uploads");
+  app.use("/uploads", expressModule.default.static(uploadsPath));
 
   return httpServer;
 }

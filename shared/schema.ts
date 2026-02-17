@@ -26,6 +26,7 @@ export const inputBasisEnum = pgEnum("input_basis", ["PER_UNIT_OUTPUT", "PER_UNI
 export const operationTypeEnum = pgEnum("operation_type", ["CONVERT", "BLEND"]);
 export const changeRequestStatusEnum = pgEnum("change_request_status", ["PENDING", "APPROVED", "REJECTED"]);
 export const carryForwardStatusEnum = pgEnum("carry_forward_status", ["PENDING", "APPROVED", "REJECTED"]);
+export const shiftEnum = pgEnum("shift", ["MORNING", "AFTERNOON", "NIGHT"]);
 export const notificationTypeEnum = pgEnum("notification_type", ["THRESHOLD_BREACH", "CARRY_FORWARD_REQUEST", "UNUSUAL_LOSS"]);
 export const lossStageEnum = pgEnum("loss_stage", ["PRODUCTION", "PACKOUT"]);
 
@@ -35,6 +36,7 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   role: roleEnum("role").notNull().default("DATA_ENTRY"),
+  active: boolean("active").notNull().default(true),
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
@@ -140,9 +142,11 @@ export const productionBatches = pgTable("production_batches", {
   date: date("date").notNull(),
   batchCode: text("batch_code").notNull(),
   batchSequence: integer("batch_sequence"),
+  shift: shiftEnum("shift"),
   notes: text("notes"),
   remainingRawMilk: decimal("remaining_raw_milk", { precision: 12, scale: 4 }),
   systemCalculatedRemaining: decimal("system_calculated_remaining", { precision: 12, scale: 4 }),
+  photoUrl: text("photo_url"),
   createdByUserId: integer("created_by_user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

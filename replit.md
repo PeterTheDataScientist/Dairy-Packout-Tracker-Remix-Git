@@ -2,13 +2,16 @@
 
 ## Overview
 
-YoMilk is a production and packout tracking web application for a dairy business. It replaces spreadsheet-based tracking with a proper database-backed system featuring configurable products, dynamic formula-driven yield calculations, audit trails, and role-based access control.
+YoMilk is a web application designed for dairy businesses to track their production and packout processes. It aims to replace manual, spreadsheet-based tracking with a robust database-backed system. The application covers the entire production lifecycle from milk intake and supplier management to production batches (conversions and blends) and finished goods packout.
 
-The app tracks the full dairy production lifecycle: milk intake from suppliers → production batches (conversions and blends) → finished goods packout. It calculates expected vs actual yields using admin-configurable formulas, flags variances, and maintains an immutable audit ledger. Any post-save edits go through an admin approval workflow (Change Requests).
+Key capabilities include:
+- Configurable products and dynamic, formula-driven yield calculations.
+- Immutable audit trails and a change request workflow for post-save edits requiring admin approval.
+- Role-based access control (Admin, Data Entry).
+- Comprehensive reporting on loss breakdowns, running stock, daily allocation, mass balance, and yield trends.
+- Automated notifications for critical events like threshold breaches and carry-forward requests.
 
-**Default credentials (seeded):**
-- Admin: `admin@yomilk.com` / `password123`
-- Data Entry: `data@yomilk.com` / `password123`
+The project's vision is to provide a reliable, efficient, and transparent system for managing dairy production, improving data integrity, and enabling better decision-making through accurate reporting and real-time insights.
 
 ## User Preferences
 
@@ -16,156 +19,63 @@ Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
-### Frontend Architecture
-- **Framework:** React 18 with TypeScript, bundled by Vite
-- **Routing:** Wouter (lightweight client-side router)
-- **State/Data Fetching:** TanStack React Query for server state management. API calls go through a centralized `apiRequest` helper in `client/src/lib/queryClient.ts`
-- **UI Components:** shadcn/ui (new-york style) built on Radix UI primitives with Tailwind CSS v4 (using `@tailwindcss/vite` plugin)
-- **Charts:** Recharts for variance and mass balance visualizations
-- **Auth Context:** Custom React context in `client/src/lib/auth.tsx` wrapping session-based auth
-- **Key Pages:** Login, Dashboard, Intake, Production, Packouts, Products (admin), Formulas (admin), Approvals (admin), Reports (admin), Running Stock (admin), Daily Allocation (admin), Loss Breakdown (admin), My History (data entry), Notifications (admin), Loss Thresholds (admin), Daily Locks (admin), Custom Units (admin)
-- **Path aliases:** `@/` maps to `client/src/`, `@shared/` maps to `shared/`
+### Core Design Principles
+The system is built as a full-stack web application with a clear separation between frontend and backend. It emphasizes data integrity, auditability, and a user-friendly interface. A strict sequential workflow (Intake → Production → Packout) is enforced to maintain data consistency.
 
-### Backend Architecture
-- **Runtime:** Node.js with TypeScript (tsx for dev, esbuild for production builds)
-- **Framework:** Express.js with JSON body parsing
-- **Authentication:** Passport.js with Local Strategy, express-session with PostgreSQL session store (`connect-pg-simple`)
-- **Password Hashing:** bcryptjs
-- **Authorization:** Two roles only — `ADMIN` and `DATA_ENTRY`. Middleware functions `requireAuth` and `requireAdmin` in `server/auth.ts`
-- **API Pattern:** RESTful JSON API under `/api/` prefix. Routes defined in `server/routes.ts`
-- **Storage Layer:** `server/storage.ts` defines an `IStorage` interface with a database-backed implementation using Drizzle ORM
-- **Database Seeding:** `server/seed.ts` creates default users, suppliers, products, and sample formulas on first run
+### Frontend
+- **Framework:** React 18 with TypeScript, using Vite for bundling.
+- **Routing:** Wouter.
+- **State Management & Data Fetching:** TanStack React Query.
+- **UI Components:** shadcn/ui (New York style) built on Radix UI primitives and styled with Tailwind CSS v4.
+- **Charting:** Recharts for data visualization in reports.
+- **Authentication:** Custom React context for session-based authentication.
+- **Key Features:** User-friendly interfaces for all stages of production, administrative tools for product, formula, and user management, and detailed reporting dashboards.
+
+### Backend
+- **Runtime:** Node.js with TypeScript.
+- **Framework:** Express.js for RESTful JSON API.
+- **Authentication & Authorization:** Passport.js with Local Strategy for session management, bcryptjs for password hashing. Role-based access control (ADMIN, DATA_ENTRY) implemented via Express middleware.
+- **Storage Layer:** Drizzle ORM for PostgreSQL interaction, enforcing a structured data schema.
+- **API Structure:** RESTful API under `/api/` prefix, with routes defined in `server/routes.ts`.
 
 ### Data Layer
-- **ORM:** Drizzle ORM with PostgreSQL dialect
-- **Schema:** Defined in `shared/schema.ts` using Drizzle's `pgTable` definitions with Zod validation schemas via `drizzle-zod`
-- **Database:** PostgreSQL (required, connection via `DATABASE_URL` environment variable)
-- **Migrations:** Drizzle Kit with `drizzle-kit push` command (`npm run db:push`)
-- **Session Store:** PostgreSQL via `connect-pg-simple` (auto-creates table)
+- **Database:** PostgreSQL is the primary data store, used for both application data and session storage.
+- **ORM:** Drizzle ORM with `drizzle-zod` for schema definition and validation.
+- **Schema:** Defined in `shared/schema.ts`, including tables for users, suppliers, products, formulas, daily intakes, production batches, packouts, audit events, and change requests.
+- **Migrations:** Managed with Drizzle Kit.
 
-### Data Model (Key Tables)
-- **users** — id, name, email, passwordHash, role (ADMIN | DATA_ENTRY)
-- **suppliers** — id, name, active
-- **products** — id, name, category (enum: RAW_MILK, MILK, YOGURT, DTY, YOLAC, PROBIOTIC, CREAM_CHEESE, FETA, SMOOTHY, FRESH_CREAM, DIP, HODZEKO, CHEESE, OTHER), unitType (LITER, KG, UNIT), isIntermediate, active, packSizeQty (decimal, nullable), packSizeUnit (enum: LITER, KILOGRAM, nullable), packSizeLabel (text, nullable)
-- **formulas** — id, name, type (CONVERSION | BLEND), outputProductId, inputBasis, active, version
-- **conversionFormulas** — formulaId, inputProductId, ratioNumerator, ratioDenominator
-- **blendComponents** — formulaId, componentProductId, fraction
-- **dailyIntakes** — date, supplierId, productId, qty, deliveredQty (optional), acceptedQty (optional), unitType, notes (optional), reviewedAt, reviewedByUserId, adminNotes
-- **productionBatches** / **productionLineItems** — batch tracking with operation types (CONVERT, BLEND); batches have remainingRawMilk (clerk-reported), systemCalculatedRemaining, batchSequence; line items have notes, reviewedAt, reviewedByUserId, adminNotes
-- **lossThresholds** — admin-configurable min/max % thresholds per formula or global, for production and packout stages
-- **carryForwardRequests** — clerk requests to carry forward remaining raw milk to next batch, requires admin approval (PENDING/APPROVED/REJECTED)
-- **dailyLocks** — admin locks a date to prevent data entry modifications
-- **adminNotifications** — threshold breach alerts, carry-forward requests, unusual losses (type, title, message, read status)
-- **customUnits** — admin-configurable units of measure beyond defaults (Litre, Kilogram, Unit)
-- **blendActualUsage** — lineItemId, componentProductId, expectedQty, actualQty (tracks per-component actual usage in BLEND operations, CASCADE delete on line item)
-- **packouts** — date, productId, qty, unitType, packSizeLabel, sourceProductId (optional), sourceQtyUsed (optional), notes (optional), reviewedAt, reviewedByUserId, adminNotes
-- **events** — immutable audit ledger (actorUserId, entityType, entityId, action, fieldName, oldValue, newValue)
-- **changeRequests** — edit approval workflow (PENDING, APPROVED, REJECTED status)
-
-### Loss Breakdown System
-Four loss categories tracked through the production process:
-- **A. Receiving Loss** — delivered vs accepted quantity at intake (from dailyIntakes.deliveredQty/acceptedQty)
-- **B. Filling/Process Loss** — source material used vs packed output (from packouts.sourceQtyUsed vs qty)
-- **C. Draining Loss** — input vs output in CONVERSION operations (from productionLineItems)
-- **D. Packing/Mixing Loss** — expected vs actual component usage in BLEND operations (from blendActualUsage)
-- API endpoint: `/api/reports/loss-breakdown` with dateFrom/dateTo query params
-- Frontend page: `/loss-breakdown` (mobile-first collapsible card design)
-
-### Running Stock Report
-Tracks daily running stock for two key material buckets:
-- **Raw Milk** — daily received (from intakes) vs used (from production line item inputs), cumulative running stock
-- **Yogurt Base** — daily produced (from line item outputs) vs used+packed (from line item inputs + packouts), cumulative running stock
-- API endpoint: `/api/reports/running-stock` with dateFrom/dateTo query params (admin only)
-- Frontend page: `/running-stock` with date range picker, charts, tables, CSV export
-- Includes **Data Gaps** panel listing CONVERT line items with missing input quantities
-
-### Daily Allocation Report
-Shows how raw milk was distributed across product categories on a given day:
-- Groups production line items by output product category
-- Shows total input used per category with drill-down to individual operations
-- API endpoint: `/api/reports/allocation?date=YYYY-MM-DD` (admin only)
-- Frontend page: `/allocation` with collapsible category cards, CSV export
-- Includes **Data Gaps** panel listing CONVERT line items with missing input quantities
-
-### Production Data Integrity Guardrails
-- **Auto-fill inputQty**: When creating/editing a CONVERT line item with null/empty inputQty, the server computes it from the formula ratio and outputQty. For UNIT-type output products with packSizeQty, it converts units to volume first (e.g., 34 units x 1L = 34L), then applies the formula ratio.
-- **inputQtyAutoFilled flag**: Returned in POST/PUT responses when auto-fill occurs; recorded in audit event metadata.
-- **Output equivalent**: Production form shows volume/weight equivalent for UNIT products (e.g., "34 units = 34L").
-- **Data gaps detection**: `findDataGaps()` helper scans CONVERT line items with null/0 inputQty across a date range, surfaced in Running Stock and Allocation APIs as `dataGaps` array.
-
-### Pack Size Tracking
-Products with unitType=UNIT have optional pack size fields:
-- `packSizeQty` — decimal volume/weight (e.g., 0.5 for 500ml)
-- `packSizeUnit` — LITER or KILOGRAM
-- `packSizeLabel` — human-readable label (e.g., "500ml", "1kg")
-- Backfilled from product names using regex pattern matching (78/78 products)
-- Editable in admin Products page
-
-### Formula Engine
-Two configurable formula types, both managed through admin UI:
-1. **CONVERSION** — transforms one input product to one output product with a ratio (e.g., milk → yogurt base at 1.1:1)
-2. **BLEND** — combines multiple component products by fraction to create an output (e.g., 70% yogurt base + 20% strawberry puree + 10% sugar → strawberry yogurt)
-
-Formulas drive expected yield calculations. The Production page computes expected vs actual input quantities and shows variance percentages.
-
-### Sequential Workflow Enforcement
-The system enforces a strict order: Intake → Production → Packout. Each step checks if the prior step has data for the selected date before allowing new records:
-- API endpoint: `GET /api/workflow/check?date=YYYY-MM-DD&step=production|packout`
-- Intake, Production, and Packout pages all check daily locks and show warnings
-
-### Remaining Raw Milk Tracking
-After completing a production batch, clerks report how much raw milk is left. Admin sees both clerk-reported and system-calculated values with variance badges:
-- PATCH `/api/production/batches/:id/remaining` updates remainingRawMilk
-- System calculates expected remaining from intake minus production usage
-- Variance > 5% shown in red badge (admin only)
-
-### Carry-Forward Workflow
-When a batch has remaining milk, clerks can request to carry it forward to the next batch:
-- POST `/api/carry-forward` creates a pending request
-- Admin approves/rejects via PATCH `/api/carry-forward/:id`
-- Uses clerk's actual remaining figure (not system-calculated)
-
-### Loss Thresholds & Notifications
-Admin-configurable loss thresholds per formula with automatic notifications:
-- Frontend pages: `/loss-thresholds`, `/notifications`
-- Bell icon with unread count badge in admin header bar (polls every 30s)
-- Notifications for: threshold breaches, carry-forward requests, unusual losses
-
-### Daily Locks
-Admin can lock a day to prevent any data entry modifications:
-- Frontend page: `/daily-locks`
-- All data entry pages (Intake, Production, Packout) check locks before allowing edits
-- API: GET/POST/DELETE `/api/daily-locks`
-
-### Custom Units
-Admin can add custom units of measure beyond the three defaults (Litre, Kilogram, Unit):
-- Frontend page: `/custom-units`
-- API: CRUD at `/api/custom-units`
-
-### Build System
-- **Development:** `npm run dev` starts Express server with Vite dev middleware (HMR via `server/vite.ts`)
-- **Production Build:** `npm run build` runs `script/build.ts` which builds the React client with Vite and bundles the server with esbuild into `dist/`
-- **Production Start:** `npm start` serves the built app from `dist/`
+### Key System Features
+- **Formula Engine:** Supports two configurable formula types: CONVERSION (one-to-one product transformation with ratio) and BLEND (combining multiple components by fraction). Drives yield calculations.
+- **Loss Breakdown System:** Tracks four categories of losses: Receiving, Filling/Process, Draining, and Packing/Mixing, with detailed reporting.
+- **Running Stock Report:** Monitors daily stock levels for Raw Milk and Yogurt Base, including data gap detection.
+- **Daily Allocation Report:** Visualizes raw milk distribution across product categories.
+- **Production Data Integrity:** Auto-fills input quantities based on formulas, tracks `inputQtyAutoFilled` flag, and detects data gaps.
+- **Pack Size Tracking:** Handles product pack sizes for accurate unit conversions.
+- **Workflow Enforcement:** Ensures sequential data entry (Intake → Production → Packout) with daily lock mechanisms.
+- **Remaining Raw Milk & Carry-Forward:** Tracks remaining raw milk after batches and facilitates an admin-approved carry-forward workflow.
+- **Loss Thresholds & Notifications:** Configurable thresholds for yield variances, triggering admin notifications.
+- **Audit Log & Change Requests:** Immutable audit trail for all data modifications and an approval workflow for post-save edits.
+- **Reporting:** Includes Dashboard KPIs, Mass Balance Reconciliation, Daily Summary, Supplier Scorecard, and Yield Trends.
+- **User Management:** Admin-controlled user creation, role assignment, and password management.
+- **Extensible Units:** Admin can define custom units of measure.
 
 ## External Dependencies
 
 ### Database
-- **PostgreSQL** — Primary data store. Required. Connected via `DATABASE_URL` environment variable. Used for both application data (via Drizzle ORM) and session storage (via `connect-pg-simple`).
+- **PostgreSQL:** The core relational database used for all application data and session storage. Connection string is configured via the `DATABASE_URL` environment variable.
 
 ### Key NPM Packages
-- **drizzle-orm** + **drizzle-kit** — ORM and migration tooling for PostgreSQL
-- **express** + **express-session** — HTTP server and session management
-- **passport** + **passport-local** — Authentication
-- **bcryptjs** — Password hashing
-- **connect-pg-simple** — PostgreSQL session store
-- **@tanstack/react-query** — Client-side data fetching and caching
-- **recharts** — Charting library for reports
-- **wouter** — Client-side routing
-- **zod** + **drizzle-zod** — Schema validation
-- **date-fns** — Date formatting utilities
-- **shadcn/ui** components (Radix UI primitives) — Full suite of UI components
-- **zustand** — Listed as dependency (mockStore.ts exists but primary data flow uses React Query against the real API)
+- **drizzle-orm** & **drizzle-kit:** For ORM capabilities and database schema management.
+- **express** & **express-session:** For building the backend API and managing user sessions.
+- **passport** & **passport-local:** For user authentication.
+- **bcryptjs:** For secure password hashing.
+- **connect-pg-simple:** PostgreSQL store for Express sessions.
+- **@tanstack/react-query:** For efficient server state management on the client-side.
+- **recharts:** For rendering interactive charts in reports.
+- **wouter:** A lightweight client-side router for React.
+- **zod** & **drizzle-zod:** For schema validation.
+- **shadcn/ui (Radix UI primitives):** Provides a comprehensive set of accessible UI components.
 
 ### Environment Variables
-- `DATABASE_URL` — PostgreSQL connection string (required)
-- `SESSION_SECRET` — Session encryption key (defaults to a dev fallback, should be set in production)
+- `DATABASE_URL`: Essential for connecting to the PostgreSQL database.
+- `SESSION_SECRET`: Used for encrypting session data.

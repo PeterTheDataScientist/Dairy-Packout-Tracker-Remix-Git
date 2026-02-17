@@ -52,6 +52,8 @@ export function setupAuth(app: Express) {
           const valid = await bcrypt.compare(password, user.passwordHash);
           if (!valid) return done(null, false, { message: "Invalid password" });
 
+          if (user.active === false) return done(null, false, { message: "Account is deactivated" });
+
           return done(null, {
             id: user.id,
             name: user.name,

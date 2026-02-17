@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import { Plus, Milk, Info, CheckCircle2, Lock } from "lucide-react";
+import { Plus, Milk, Info, CheckCircle2, Lock, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { format } from "date-fns";
@@ -128,6 +128,26 @@ export default function IntakePage() {
   const getProductName = (id: number) => products.find(p => p.id === id)?.name || `#${id}`;
   const getSupplierName = (id: number | null) => (id ? suppliers.find(s => s.id === id)?.name || `#${id}` : "—");
 
+  const exportCSV = () => {
+    const headers = ["Date", "Supplier", "Product", "Qty", "Delivered Qty", "Accepted Qty", "Notes", "Status"];
+    const rows = intakes.map((i: any) => [
+      i.date,
+      suppliers.find((s: any) => s.id === i.supplierId)?.name || "",
+      products.find((p: any) => p.id === i.productId)?.name || "",
+      i.qty,
+      i.deliveredQty || "",
+      i.acceptedQty || "",
+      i.notes || "",
+      i.reviewedAt ? "Reviewed" : "Pending"
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `intake-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -135,9 +155,12 @@ export default function IntakePage() {
           <h2 className="text-2xl font-bold tracking-tight">Intake</h2>
           <p className="text-muted-foreground">Log raw material deliveries from suppliers.</p>
         </div>
-        <Button onClick={() => setIsDialogOpen(true)} className="gap-2" disabled={!!dailyLock} data-testid="button-add-intake">
-          <Plus className="h-4 w-4" /> Log Delivery
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={exportCSV} data-testid="button-export-csv"><Download className="h-4 w-4 mr-1" /> CSV</Button>
+          <Button onClick={() => setIsDialogOpen(true)} className="gap-2" disabled={!!dailyLock} data-testid="button-add-intake">
+            <Plus className="h-4 w-4" /> Log Delivery
+          </Button>
+        </div>
       </div>
 
       {dailyLock && (

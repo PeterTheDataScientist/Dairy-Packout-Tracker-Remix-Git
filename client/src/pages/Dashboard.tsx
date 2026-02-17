@@ -1,66 +1,165 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { useQuery } from "@tanstack/react-query";
-import { Activity, Milk, Factory, Package, AlertTriangle, ArrowUpRight } from "lucide-react";
+import { Activity, Milk, Factory, Package, TrendingUp, TrendingDown, Minus, ClipboardCheck, Eye, BarChart3 } from "lucide-react";
 import { Link } from "wouter";
+import { useAuth } from "@/lib/auth";
 
 type Product = { id: number; name: string; unitType: string; active: boolean };
 type LineItem = { id: number; batchCode: string; batchDate: string; outputProductId: number; outputQty: string; operationType: string };
 type Packout = { id: number; productId: number; qty: string };
 
+type DashboardStats = {
+  today: { intake: number; production: number; packed: number };
+  thisWeek: { intake: number; production: number; packed: number };
+  trends: { intake: number; production: number; packed: number };
+  unreviewed: { production: number; packouts: number; intakes: number };
+  pending: { changeRequests: number; carryForwards: number };
+};
+
+function TrendIndicator({ value }: { value: number }) {
+  if (value > 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400" data-testid="trend-up">
+        <TrendingUp className="h-3.5 w-3.5" />
+        +{value.toFixed(1)}%
+      </span>
+    );
+  }
+  if (value < 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs font-medium text-red-600 dark:text-red-400" data-testid="trend-down">
+        <TrendingDown className="h-3.5 w-3.5" />
+        {value.toFixed(1)}%
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground" data-testid="trend-neutral">
+      <Minus className="h-3.5 w-3.5" />
+      0.0%
+    </span>
+  );
+}
+
 export default function Dashboard() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "ADMIN";
+
+  const { data: stats } = useQuery<DashboardStats>({ queryKey: ["/api/dashboard/stats"] });
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
   const { data: lineItems = [] } = useQuery<LineItem[]>({ queryKey: ["/api/production/line-items"] });
-  const { data: packouts = [] } = useQuery<Packout[]>({ queryKey: ["/api/packouts"] });
 
   const getProductUnit = (id: number) => products.find(p => p.id === id)?.unitType || "";
   const getProductName = (id: number) => products.find(p => p.id === id)?.name || "";
 
-  const totalPacked = packouts.reduce((sum, p) => sum + parseFloat(p.qty), 0);
+  const todayIntake = stats?.today.intake ?? 0;
+  const todayProduction = stats?.today.production ?? 0;
+  const todayPacked = stats?.today.packed ?? 0;
+  const totalLoss = todayIntake > 0 ? ((todayIntake - todayProduction) / todayIntake) * 100 : 0;
+
+  const pendingTotal = (stats?.pending.changeRequests ?? 0) + (stats?.pending.carryForwards ?? 0);
+  const unreviewedTotal = (stats?.unreviewed.production ?? 0) + (stats?.unreviewed.packouts ?? 0) + (stats?.unreviewed.intakes ?? 0);
+  const weeklyVolume = stats?.thisWeek.intake ?? 0;
 
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="hover-elevate transition-all duration-200 border-primary/10 bg-gradient-to-br from-card to-primary/5" data-testid="card-total-batches">
+        <Card className="hover-elevate transition-all duration-200 border-primary/10 bg-gradient-to-br from-card to-primary/5" data-testid="card-today-intake">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Batches</CardTitle>
-            <Activity className="h-4 w-4 text-primary" />
+            <CardTitle className="text-sm font-medium text-muted-foreground">Today's Intake</CardTitle>
+            <Milk className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-total-batches">{lineItems.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Production operations logged</p>
+            <div className="text-2xl font-bold" data-testid="text-today-intake">{todayIntake.toLocaleString()} L</div>
+            <div className="mt-1">
+              <TrendIndicator value={stats?.trends.intake ?? 0} />
+              <span className="text-xs text-muted-foreground ml-1">vs last week</span>
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="hover-elevate transition-all duration-200" data-testid="card-active-products">
+        <Card className="hover-elevate transition-all duration-200 border-amber-500/10 bg-gradient-to-br from-card to-amber-500/5" data-testid="card-today-production">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Active Products</CardTitle>
-            <Milk className="h-4 w-4 text-blue-400" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-active-products">{products.filter(p => p.active).length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Configured in system</p>
-          </CardContent>
-        </Card>
-
-        <Card className="hover-elevate transition-all duration-200" data-testid="card-packout-total">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Packed</CardTitle>
-            <Package className="h-4 w-4 text-purple-400" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold" data-testid="text-packout-total">{totalPacked.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground mt-1">Units packed out</p>
-          </CardContent>
-        </Card>
-
-        <Card className="hover-elevate transition-all duration-200" data-testid="card-operations">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Conversions</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Today's Production</CardTitle>
             <Factory className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{lineItems.filter(l => l.operationType === "CONVERT").length}</div>
-            <p className="text-xs text-muted-foreground mt-1">Conversion operations</p>
+            <div className="text-2xl font-bold" data-testid="text-today-production">{todayProduction.toLocaleString()} L</div>
+            <div className="mt-1">
+              <TrendIndicator value={stats?.trends.production ?? 0} />
+              <span className="text-xs text-muted-foreground ml-1">vs last week</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="hover-elevate transition-all duration-200 border-purple-500/10 bg-gradient-to-br from-card to-purple-500/5" data-testid="card-today-packed">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Today's Packed</CardTitle>
+            <Package className="h-4 w-4 text-purple-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold" data-testid="text-today-packed">{todayPacked.toLocaleString()} units</div>
+            <div className="mt-1">
+              <TrendIndicator value={stats?.trends.packed ?? 0} />
+              <span className="text-xs text-muted-foreground ml-1">vs last week</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="hover-elevate transition-all duration-200 border-red-500/10 bg-gradient-to-br from-card to-red-500/5" data-testid="card-total-loss">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Loss %</CardTitle>
+            <Activity className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold" data-testid="text-total-loss">{totalLoss.toFixed(1)}%</div>
+            <div className="mt-1">
+              <TrendIndicator value={totalLoss > 0 ? -totalLoss : 0} />
+              <span className="text-xs text-muted-foreground ml-1">week trend</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className={`grid gap-4 ${isAdmin ? "md:grid-cols-3" : "md:grid-cols-1"}`}>
+        {isAdmin && (
+          <>
+            <Card className="hover-elevate transition-all duration-200 border-orange-500/10 bg-gradient-to-br from-card to-orange-500/5" data-testid="card-pending-approvals">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Pending Approvals</CardTitle>
+                <ClipboardCheck className="h-4 w-4 text-orange-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold" data-testid="text-pending-approvals">{pendingTotal.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {stats?.pending.changeRequests ?? 0} change requests • {stats?.pending.carryForwards ?? 0} carry-forwards
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card className="hover-elevate transition-all duration-200 border-sky-500/10 bg-gradient-to-br from-card to-sky-500/5" data-testid="card-unreviewed-records">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Unreviewed Records</CardTitle>
+                <Eye className="h-4 w-4 text-sky-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold" data-testid="text-unreviewed-records">{unreviewedTotal.toLocaleString()}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {stats?.unreviewed.production ?? 0} production • {stats?.unreviewed.packouts ?? 0} packouts • {stats?.unreviewed.intakes ?? 0} intakes
+                </p>
+              </CardContent>
+            </Card>
+          </>
+        )}
+
+        <Card className="hover-elevate transition-all duration-200 border-emerald-500/10 bg-gradient-to-br from-card to-emerald-500/5" data-testid="card-weekly-volume">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Weekly Volume</CardTitle>
+            <BarChart3 className="h-4 w-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold" data-testid="text-weekly-volume">{weeklyVolume.toLocaleString()} L</div>
+            <p className="text-xs text-muted-foreground mt-1">This week's total intake</p>
           </CardContent>
         </Card>
       </div>

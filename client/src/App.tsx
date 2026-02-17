@@ -24,6 +24,13 @@ import Notifications from "@/pages/Notifications";
 import LossThresholds from "@/pages/LossThresholds";
 import DailyLocks from "@/pages/DailyLocks";
 import CustomUnits from "@/pages/CustomUnits";
+import MassBalance from "@/pages/MassBalance";
+import DailySummary from "@/pages/DailySummary";
+import AuditLog from "@/pages/AuditLog";
+import ActivityLog from "@/pages/ActivityLog";
+import SupplierScorecard from "@/pages/SupplierScorecard";
+import YieldTrends from "@/pages/YieldTrends";
+import UserManagement from "@/pages/UserManagement";
 import { Loader2 } from "lucide-react";
 import { ReactNode } from "react";
 
@@ -71,6 +78,13 @@ function AppRoutes() {
         <Route path="/loss-thresholds">{() => <AdminRoute component={LossThresholds} />}</Route>
         <Route path="/daily-locks">{() => <AdminRoute component={DailyLocks} />}</Route>
         <Route path="/custom-units">{() => <AdminRoute component={CustomUnits} />}</Route>
+        <Route path="/mass-balance">{() => <AdminRoute component={MassBalance} />}</Route>
+        <Route path="/daily-summary">{() => <AdminRoute component={DailySummary} />}</Route>
+        <Route path="/audit-log">{() => <AdminRoute component={AuditLog} />}</Route>
+        <Route path="/activity-log">{() => <AdminRoute component={ActivityLog} />}</Route>
+        <Route path="/supplier-scorecard">{() => <AdminRoute component={SupplierScorecard} />}</Route>
+        <Route path="/yield-trends">{() => <AdminRoute component={YieldTrends} />}</Route>
+        <Route path="/user-management">{() => <AdminRoute component={UserManagement} />}</Route>
 
         <Route component={NotFound} />
       </Switch>

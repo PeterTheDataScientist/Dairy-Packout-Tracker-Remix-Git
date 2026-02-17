@@ -32,6 +32,13 @@ import {
   Lock,
   Gauge,
   Ruler,
+  Users,
+  Scale,
+  FileText,
+  Activity,
+  Star,
+  TrendingUp,
+  ClipboardList,
 } from "lucide-react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/lib/auth";
@@ -59,6 +66,13 @@ const routeTitles: Record<string, string> = {
   "/loss-thresholds": "Loss Thresholds",
   "/daily-locks": "Daily Locks",
   "/custom-units": "Custom Units",
+  "/mass-balance": "Mass Balance",
+  "/daily-summary": "Daily Summary",
+  "/audit-log": "Audit Log",
+  "/activity-log": "Activity Log",
+  "/supplier-scorecard": "Supplier Scorecard",
+  "/yield-trends": "Yield Trends",
+  "/user-management": "User Management",
 };
 
 export function AppSidebar() {
@@ -82,6 +96,10 @@ export function AppSidebar() {
           { title: "Loss Breakdown", icon: TrendingDown, path: "/loss-breakdown" },
           { title: "Running Stock", icon: BarChart3, path: "/running-stock" },
           { title: "Allocation", icon: PieChart, path: "/allocation" },
+          { title: "Mass Balance", icon: Scale, path: "/mass-balance" },
+          { title: "Daily Summary", icon: ClipboardList, path: "/daily-summary" },
+          { title: "Supplier Scorecard", icon: Star, path: "/supplier-scorecard" },
+          { title: "Yield Trends", icon: TrendingUp, path: "/yield-trends" },
         ]
     ),
   ];
@@ -95,6 +113,9 @@ export function AppSidebar() {
     { title: "Loss Thresholds", icon: Gauge, path: "/loss-thresholds" },
     { title: "Daily Locks", icon: Lock, path: "/daily-locks" },
     { title: "Custom Units", icon: Ruler, path: "/custom-units" },
+    { title: "User Management", icon: Users, path: "/user-management" },
+    { title: "Audit Log", icon: FileText, path: "/audit-log" },
+    { title: "Activity Log", icon: Activity, path: "/activity-log" },
   ];
 
   return (
