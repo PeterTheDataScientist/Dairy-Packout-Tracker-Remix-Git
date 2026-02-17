@@ -359,21 +359,19 @@ export async function registerRoutes(
   });
 
   app.post("/api/production/batches", requireAuth, async (req, res) => {
+    const date = req.body.date;
+    const existingBatches = await storage.getProductionBatches(date, date);
+    const batchSequence = existingBatches.length + 1;
+
     const b = await storage.createProductionBatch({
       ...req.body,
+      batchSequence,
       createdByUserId: req.user!.id,
     });
     await storage.createEvent({
-      actorUserId: req.user!.id,
-      entityType: "production_batch",
-      entityId: b.id,
-      action: "CREATE",
-      ipAddress: req.ip || null,
-      fieldName: null,
-      oldValue: null,
-      newValue: JSON.stringify(b),
-      reason: null,
-      metadataJson: null,
+      actorUserId: req.user!.id, entityType: "production_batch", entityId: b.id,
+      action: "CREATE", ipAddress: req.ip || null, fieldName: null,
+      oldValue: null, newValue: JSON.stringify(b), reason: null, metadataJson: null,
     });
     res.status(201).json(b);
   });
@@ -1279,6 +1277,306 @@ export async function registerRoutes(
       allocations,
       dataGaps,
     });
+  });
+
+  // --- SEQUENTIAL WORKFLOW CHECK ---
+  app.get("/api/workflow/check", requireAuth, async (req, res) => {
+    const { date, step } = req.query;
+    if (!date || !step) return res.status(400).json({ message: "date and step are required" });
+    const dateStr = date as string;
+
+    const lock = await storage.getDailyLock(dateStr);
+    if (lock) {
+      return res.json({ allowed: false, reason: "This day has been locked by admin. No changes allowed." });
+    }
+
+    if (step === "production") {
+      const intakes = await storage.getDailyIntakes(dateStr, dateStr);
+      if (intakes.length === 0) {
+        return res.json({ allowed: false, reason: "No milk intake recorded for this date. Please record intake first." });
+      }
+      return res.json({ allowed: true });
+    }
+
+    if (step === "packout") {
+      const batches = await storage.getProductionBatches(dateStr, dateStr);
+      if (batches.length === 0) {
+        return res.json({ allowed: false, reason: "No production batches recorded for this date. Please complete production first." });
+      }
+      return res.json({ allowed: true });
+    }
+
+    return res.json({ allowed: true });
+  });
+
+  // --- LOSS THRESHOLDS ---
+  app.get("/api/loss-thresholds", requireAdmin, async (_req, res) => {
+    const list = await storage.getLossThresholds();
+    res.json(list);
+  });
+
+  app.post("/api/loss-thresholds", requireAdmin, async (req, res) => {
+    const t = await storage.createLossThreshold(req.body);
+    await storage.createEvent({
+      actorUserId: req.user!.id, entityType: "loss_threshold", entityId: t.id,
+      action: "CREATE", ipAddress: req.ip || null, fieldName: null,
+      oldValue: null, newValue: JSON.stringify(t), reason: null, metadataJson: null,
+    });
+    res.status(201).json(t);
+  });
+
+  app.patch("/api/loss-thresholds/:id", requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const old = await storage.getLossThreshold(id);
+    if (!old) return res.status(404).json({ message: "Not found" });
+    const updated = await storage.updateLossThreshold(id, req.body);
+    await storage.createEvent({
+      actorUserId: req.user!.id, entityType: "loss_threshold", entityId: id,
+      action: "UPDATE", ipAddress: req.ip || null, fieldName: null,
+      oldValue: JSON.stringify(old), newValue: JSON.stringify(updated), reason: null, metadataJson: null,
+    });
+    res.json(updated);
+  });
+
+  app.delete("/api/loss-thresholds/:id", requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id);
+    await storage.deleteLossThreshold(id);
+    await storage.createEvent({
+      actorUserId: req.user!.id, entityType: "loss_threshold", entityId: id,
+      action: "DELETE", ipAddress: req.ip || null, fieldName: null,
+      oldValue: null, newValue: null, reason: null, metadataJson: null,
+    });
+    res.json({ success: true });
+  });
+
+  // --- CARRY FORWARD REQUESTS ---
+  app.get("/api/carry-forward", requireAuth, async (req, res) => {
+    const { status } = req.query;
+    const list = await storage.getCarryForwardRequests(status as string);
+    res.json(list);
+  });
+
+  app.post("/api/carry-forward", requireAuth, async (req, res) => {
+    const cf = await storage.createCarryForwardRequest({
+      ...req.body,
+      requestedByUserId: req.user!.id,
+    });
+    await storage.createAdminNotification({
+      type: "CARRY_FORWARD_REQUEST",
+      title: "Carry-Forward Request",
+      message: `Carry-forward of ${cf.amountLitres}L requested from batch #${cf.fromBatchId}`,
+      entityType: "carry_forward_request",
+      entityId: cf.id,
+      severity: "info",
+      metadata: JSON.stringify({ fromBatchId: cf.fromBatchId, amount: cf.amountLitres }),
+    });
+    await storage.createEvent({
+      actorUserId: req.user!.id, entityType: "carry_forward_request", entityId: cf.id,
+      action: "CREATE", ipAddress: req.ip || null, fieldName: null,
+      oldValue: null, newValue: JSON.stringify(cf), reason: null, metadataJson: null,
+    });
+    res.status(201).json(cf);
+  });
+
+  app.patch("/api/carry-forward/:id", requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const { status, adminComment } = req.body;
+    if (!["APPROVED", "REJECTED"].includes(status)) {
+      return res.status(400).json({ message: "Status must be APPROVED or REJECTED" });
+    }
+    const existing = await storage.getCarryForwardRequest(id);
+    if (!existing) return res.status(404).json({ message: "Not found" });
+    if (existing.status !== "PENDING") return res.status(400).json({ message: "Already processed" });
+
+    const updated = await storage.updateCarryForwardStatus(id, status, req.user!.id, adminComment);
+    await storage.createEvent({
+      actorUserId: req.user!.id, entityType: "carry_forward_request", entityId: id,
+      action: status === "APPROVED" ? "APPROVE" : "REJECT", ipAddress: req.ip || null,
+      fieldName: null, oldValue: "PENDING", newValue: status, reason: adminComment || null, metadataJson: null,
+    });
+    res.json(updated);
+  });
+
+  app.get("/api/carry-forward/batch/:batchId", requireAuth, async (req, res) => {
+    const batchId = parseInt(req.params.batchId);
+    const cf = await storage.getCarryForwardByFromBatch(batchId);
+    res.json(cf || null);
+  });
+
+  // --- DAILY LOCKS ---
+  app.get("/api/daily-locks", requireAuth, async (_req, res) => {
+    const list = await storage.getDailyLocks();
+    res.json(list);
+  });
+
+  app.get("/api/daily-locks/:date", requireAuth, async (req, res) => {
+    const lock = await storage.getDailyLock(req.params.date);
+    res.json(lock || null);
+  });
+
+  app.post("/api/daily-locks", requireAdmin, async (req, res) => {
+    const { date } = req.body;
+    if (!date) return res.status(400).json({ message: "date is required" });
+    const existing = await storage.getDailyLock(date);
+    if (existing) return res.status(400).json({ message: "This date is already locked" });
+    const lock = await storage.createDailyLock({ date, lockedByUserId: req.user!.id });
+    await storage.createEvent({
+      actorUserId: req.user!.id, entityType: "daily_lock", entityId: lock.id,
+      action: "CREATE", ipAddress: req.ip || null, fieldName: null,
+      oldValue: null, newValue: JSON.stringify(lock), reason: null, metadataJson: null,
+    });
+    res.status(201).json(lock);
+  });
+
+  app.delete("/api/daily-locks/:date", requireAdmin, async (req, res) => {
+    const existing = await storage.getDailyLock(req.params.date);
+    if (!existing) return res.status(404).json({ message: "No lock found for this date" });
+    await storage.deleteDailyLock(req.params.date);
+    await storage.createEvent({
+      actorUserId: req.user!.id, entityType: "daily_lock", entityId: existing.id,
+      action: "DELETE", ipAddress: req.ip || null, fieldName: null,
+      oldValue: JSON.stringify(existing), newValue: null, reason: null, metadataJson: null,
+    });
+    res.json({ success: true });
+  });
+
+  // --- ADMIN NOTIFICATIONS ---
+  app.get("/api/notifications", requireAdmin, async (req, res) => {
+    const { unread } = req.query;
+    const list = await storage.getAdminNotifications(unread === "true");
+    res.json(list);
+  });
+
+  app.get("/api/notifications/count", requireAdmin, async (_req, res) => {
+    const count = await storage.getUnreadNotificationCount();
+    res.json({ count });
+  });
+
+  app.patch("/api/notifications/:id/read", requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const updated = await storage.markNotificationRead(id);
+    if (!updated) return res.status(404).json({ message: "Not found" });
+    res.json(updated);
+  });
+
+  app.post("/api/notifications/mark-all-read", requireAdmin, async (_req, res) => {
+    await storage.markAllNotificationsRead();
+    res.json({ success: true });
+  });
+
+  // --- CUSTOM UNITS ---
+  app.get("/api/custom-units", requireAuth, async (_req, res) => {
+    const list = await storage.getCustomUnits();
+    res.json(list);
+  });
+
+  app.post("/api/custom-units", requireAdmin, async (req, res) => {
+    const u = await storage.createCustomUnit(req.body);
+    res.status(201).json(u);
+  });
+
+  app.patch("/api/custom-units/:id", requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const updated = await storage.updateCustomUnit(id, req.body);
+    if (!updated) return res.status(404).json({ message: "Not found" });
+    res.json(updated);
+  });
+
+  app.delete("/api/custom-units/:id", requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id);
+    await storage.deleteCustomUnit(id);
+    res.json({ success: true });
+  });
+
+  // --- REMAINING MILK TRACKING ---
+  app.patch("/api/production/batches/:id/remaining", requireAuth, async (req, res) => {
+    const id = parseInt(req.params.id);
+    const batch = await storage.getProductionBatch(id);
+    if (!batch) return res.status(404).json({ message: "Batch not found" });
+
+    const { remainingRawMilk } = req.body;
+
+    const lineItems = await storage.getLineItemsByBatch(id);
+    const allProducts = await storage.getProducts();
+    const rawMilkIds = new Set(allProducts.filter(p => p.category === "RAW_MILK").map(p => p.id));
+
+    const intakes = await storage.getDailyIntakes(batch.date, batch.date);
+    const totalIntake = intakes
+      .filter(i => rawMilkIds.has(i.productId))
+      .reduce((acc, i) => acc + parseFloat(i.qty), 0);
+
+    const totalUsed = lineItems
+      .filter(li => li.inputProductId && rawMilkIds.has(li.inputProductId))
+      .reduce((acc, li) => acc + parseFloat(li.inputQty || "0"), 0);
+
+    const systemCalculatedRemaining = (totalIntake - totalUsed).toFixed(4);
+
+    const updated = await storage.updateProductionBatch(id, {
+      remainingRawMilk: remainingRawMilk,
+      systemCalculatedRemaining: systemCalculatedRemaining,
+    });
+
+    const clerkRemaining = parseFloat(remainingRawMilk);
+    const systemRemaining = parseFloat(systemCalculatedRemaining);
+    if (Math.abs(clerkRemaining - systemRemaining) > 0.5) {
+      const variancePercent = systemRemaining > 0
+        ? (((clerkRemaining - systemRemaining) / systemRemaining) * 100).toFixed(1)
+        : "N/A";
+      await storage.createAdminNotification({
+        type: "UNUSUAL_LOSS",
+        title: "Remaining Milk Variance",
+        message: `Batch ${batch.batchCode}: Clerk reported ${clerkRemaining}L remaining, system calculated ${systemRemaining}L (${variancePercent}% variance)`,
+        entityType: "production_batch",
+        entityId: id,
+        severity: Math.abs(clerkRemaining - systemRemaining) > 5 ? "critical" : "warning",
+        metadata: JSON.stringify({ clerkRemaining, systemRemaining, variancePercent }),
+      });
+    }
+
+    await storage.createEvent({
+      actorUserId: req.user!.id, entityType: "production_batch", entityId: id,
+      action: "UPDATE_REMAINING", ipAddress: req.ip || null, fieldName: "remainingRawMilk",
+      oldValue: batch.remainingRawMilk || null, newValue: remainingRawMilk,
+      reason: null, metadataJson: JSON.stringify({ systemCalculatedRemaining }),
+    });
+
+    res.json(updated);
+  });
+
+  // --- LOSS THRESHOLD CHECK ---
+  app.post("/api/check-loss-threshold", requireAuth, async (req, res) => {
+    const { formulaId, stage, lossPercent, entityType, entityId, details } = req.body;
+    if (!stage || lossPercent === undefined) return res.status(400).json({ message: "stage and lossPercent required" });
+
+    let threshold = formulaId ? await storage.getLossThresholdByFormula(formulaId, stage) : null;
+    if (!threshold) {
+      threshold = await storage.getGlobalLossThreshold(stage);
+    }
+
+    if (threshold) {
+      const min = parseFloat(threshold.minLossPercent);
+      const max = parseFloat(threshold.maxLossPercent);
+      const loss = Math.abs(parseFloat(lossPercent));
+
+      if (loss > max) {
+        await storage.createAdminNotification({
+          type: "THRESHOLD_BREACH",
+          title: `Loss Threshold Exceeded (${stage})`,
+          message: `${details || "Production"}: ${loss.toFixed(1)}% loss exceeds maximum ${max}% threshold`,
+          entityType: entityType || "production_line_item",
+          entityId: entityId || 0,
+          severity: "critical",
+          metadata: JSON.stringify({ formulaId, stage, lossPercent: loss, threshold: { min, max } }),
+        });
+        return res.json({ breached: true, severity: "critical", message: `Loss of ${loss.toFixed(1)}% exceeds maximum threshold of ${max}%` });
+      }
+
+      if (loss > min && loss <= max) {
+        return res.json({ breached: false, severity: "warning", message: `Loss of ${loss.toFixed(1)}% is within warning range (${min}%-${max}%)` });
+      }
+    }
+
+    res.json({ breached: false, severity: "ok" });
   });
 
   return httpServer;

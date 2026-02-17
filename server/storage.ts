@@ -15,6 +15,11 @@ import {
   changeRequests, type ChangeRequest, type InsertChangeRequest,
   blendActualUsage, type BlendActualUsage, type InsertBlendActualUsage,
   yieldTolerances,
+  lossThresholds, type LossThreshold, type InsertLossThreshold,
+  carryForwardRequests, type CarryForwardRequest, type InsertCarryForwardRequest,
+  dailyLocks, type DailyLock, type InsertDailyLock,
+  adminNotifications, type AdminNotification, type InsertAdminNotification,
+  customUnits, type CustomUnit, type InsertCustomUnit,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -107,6 +112,42 @@ export interface IStorage {
 
   // Admin Review
   adminReviewRecord(entityType: string, entityId: number, reviewedByUserId: number, adminNotes: string | null): Promise<void>;
+
+  // Loss Thresholds
+  getLossThresholds(): Promise<LossThreshold[]>;
+  getLossThreshold(id: number): Promise<LossThreshold | undefined>;
+  getLossThresholdByFormula(formulaId: number, stage: string): Promise<LossThreshold | undefined>;
+  getGlobalLossThreshold(stage: string): Promise<LossThreshold | undefined>;
+  createLossThreshold(t: InsertLossThreshold): Promise<LossThreshold>;
+  updateLossThreshold(id: number, updates: Partial<InsertLossThreshold>): Promise<LossThreshold | undefined>;
+  deleteLossThreshold(id: number): Promise<boolean>;
+
+  // Carry Forward Requests
+  getCarryForwardRequests(status?: string): Promise<CarryForwardRequest[]>;
+  getCarryForwardRequest(id: number): Promise<CarryForwardRequest | undefined>;
+  getCarryForwardByFromBatch(batchId: number): Promise<CarryForwardRequest | undefined>;
+  createCarryForwardRequest(c: InsertCarryForwardRequest): Promise<CarryForwardRequest>;
+  updateCarryForwardStatus(id: number, status: "APPROVED" | "REJECTED", reviewedByUserId: number, comment?: string): Promise<CarryForwardRequest | undefined>;
+
+  // Daily Locks
+  getDailyLocks(): Promise<DailyLock[]>;
+  getDailyLock(date: string): Promise<DailyLock | undefined>;
+  createDailyLock(l: InsertDailyLock): Promise<DailyLock>;
+  deleteDailyLock(date: string): Promise<boolean>;
+
+  // Admin Notifications
+  getAdminNotifications(unreadOnly?: boolean): Promise<AdminNotification[]>;
+  getAdminNotification(id: number): Promise<AdminNotification | undefined>;
+  createAdminNotification(n: InsertAdminNotification): Promise<AdminNotification>;
+  markNotificationRead(id: number): Promise<AdminNotification | undefined>;
+  markAllNotificationsRead(): Promise<void>;
+  getUnreadNotificationCount(): Promise<number>;
+
+  // Custom Units
+  getCustomUnits(): Promise<CustomUnit[]>;
+  createCustomUnit(u: InsertCustomUnit): Promise<CustomUnit>;
+  updateCustomUnit(id: number, updates: Partial<InsertCustomUnit>): Promise<CustomUnit | undefined>;
+  deleteCustomUnit(id: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -491,6 +532,154 @@ export class DatabaseStorage implements IStorage {
     } else if (entityType === "PACKOUT") {
       await db.update(packouts).set(reviewData).where(eq(packouts.id, entityId));
     }
+  }
+
+  // Loss Thresholds
+  async getLossThresholds() {
+    return db.select().from(lossThresholds);
+  }
+
+  async getLossThreshold(id: number) {
+    const [row] = await db.select().from(lossThresholds).where(eq(lossThresholds.id, id));
+    return row;
+  }
+
+  async getLossThresholdByFormula(formulaId: number, stage: string) {
+    const [row] = await db.select().from(lossThresholds).where(
+      and(eq(lossThresholds.formulaId, formulaId), eq(lossThresholds.stage, stage as any), eq(lossThresholds.active, true))
+    );
+    return row;
+  }
+
+  async getGlobalLossThreshold(stage: string) {
+    const [row] = await db.select().from(lossThresholds).where(
+      and(eq(lossThresholds.isGlobal, true), eq(lossThresholds.stage, stage as any), eq(lossThresholds.active, true))
+    );
+    return row;
+  }
+
+  async createLossThreshold(t: InsertLossThreshold) {
+    const [created] = await db.insert(lossThresholds).values(t).returning();
+    return created;
+  }
+
+  async updateLossThreshold(id: number, updates: Partial<InsertLossThreshold>) {
+    const [updated] = await db.update(lossThresholds).set(updates).where(eq(lossThresholds.id, id)).returning();
+    return updated;
+  }
+
+  async deleteLossThreshold(id: number) {
+    await db.delete(lossThresholds).where(eq(lossThresholds.id, id));
+    return true;
+  }
+
+  // Carry Forward Requests
+  async getCarryForwardRequests(status?: string) {
+    if (status) {
+      return db.select().from(carryForwardRequests)
+        .where(eq(carryForwardRequests.status, status as any))
+        .orderBy(desc(carryForwardRequests.requestedAt));
+    }
+    return db.select().from(carryForwardRequests).orderBy(desc(carryForwardRequests.requestedAt));
+  }
+
+  async getCarryForwardRequest(id: number) {
+    const [row] = await db.select().from(carryForwardRequests).where(eq(carryForwardRequests.id, id));
+    return row;
+  }
+
+  async getCarryForwardByFromBatch(batchId: number) {
+    const [row] = await db.select().from(carryForwardRequests).where(eq(carryForwardRequests.fromBatchId, batchId));
+    return row;
+  }
+
+  async createCarryForwardRequest(c: InsertCarryForwardRequest) {
+    const [created] = await db.insert(carryForwardRequests).values(c).returning();
+    return created;
+  }
+
+  async updateCarryForwardStatus(id: number, status: "APPROVED" | "REJECTED", reviewedByUserId: number, comment?: string) {
+    const [updated] = await db.update(carryForwardRequests).set({
+      status,
+      reviewedByUserId,
+      reviewedAt: new Date(),
+      adminComment: comment || null,
+    }).where(eq(carryForwardRequests.id, id)).returning();
+    return updated;
+  }
+
+  // Daily Locks
+  async getDailyLocks() {
+    return db.select().from(dailyLocks);
+  }
+
+  async getDailyLock(date: string) {
+    const [row] = await db.select().from(dailyLocks).where(eq(dailyLocks.date, date));
+    return row;
+  }
+
+  async createDailyLock(l: InsertDailyLock) {
+    const [created] = await db.insert(dailyLocks).values(l).returning();
+    return created;
+  }
+
+  async deleteDailyLock(date: string) {
+    await db.delete(dailyLocks).where(eq(dailyLocks.date, date));
+    return true;
+  }
+
+  // Admin Notifications
+  async getAdminNotifications(unreadOnly?: boolean) {
+    if (unreadOnly) {
+      return db.select().from(adminNotifications)
+        .where(eq(adminNotifications.isRead, false))
+        .orderBy(desc(adminNotifications.createdAt));
+    }
+    return db.select().from(adminNotifications).orderBy(desc(adminNotifications.createdAt));
+  }
+
+  async getAdminNotification(id: number) {
+    const [row] = await db.select().from(adminNotifications).where(eq(adminNotifications.id, id));
+    return row;
+  }
+
+  async createAdminNotification(n: InsertAdminNotification) {
+    const [created] = await db.insert(adminNotifications).values(n).returning();
+    return created;
+  }
+
+  async markNotificationRead(id: number) {
+    const [updated] = await db.update(adminNotifications).set({ isRead: true }).where(eq(adminNotifications.id, id)).returning();
+    return updated;
+  }
+
+  async markAllNotificationsRead() {
+    await db.update(adminNotifications).set({ isRead: true }).where(eq(adminNotifications.isRead, false));
+  }
+
+  async getUnreadNotificationCount() {
+    const result = await db.select({ count: sql<number>`count(*)` }).from(adminNotifications).where(eq(adminNotifications.isRead, false));
+    return result[0]?.count ?? 0;
+  }
+
+  // Custom Units
+  async getCustomUnits() {
+    return db.select().from(customUnits);
+  }
+
+  async createCustomUnit(u: InsertCustomUnit) {
+    const [created] = await db.insert(customUnits).values(u).returning();
+    return created;
+  }
+
+  async updateCustomUnit(id: number, updates: Partial<InsertCustomUnit>) {
+    const [updated] = await db.update(customUnits).set(updates).where(eq(customUnits.id, id)).returning();
+    return updated;
+  }
+
+  async deleteCustomUnit(id: number) {
+    await db.delete(customUnits).where(eq(customUnits.id, id));
+    return true;
   }
 }
 
