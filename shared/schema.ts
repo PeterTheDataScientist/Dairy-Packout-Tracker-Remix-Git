@@ -25,6 +25,9 @@ export const formulaTypeEnum = pgEnum("formula_type", ["CONVERSION", "BLEND"]);
 export const inputBasisEnum = pgEnum("input_basis", ["PER_UNIT_OUTPUT", "PER_UNIT_INPUT"]);
 export const operationTypeEnum = pgEnum("operation_type", ["CONVERT", "BLEND"]);
 export const changeRequestStatusEnum = pgEnum("change_request_status", ["PENDING", "APPROVED", "REJECTED"]);
+export const carryForwardStatusEnum = pgEnum("carry_forward_status", ["PENDING", "APPROVED", "REJECTED"]);
+export const notificationTypeEnum = pgEnum("notification_type", ["THRESHOLD_BREACH", "CARRY_FORWARD_REQUEST", "UNUSUAL_LOSS"]);
+export const lossStageEnum = pgEnum("loss_stage", ["PRODUCTION", "PACKOUT"]);
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -136,7 +139,10 @@ export const productionBatches = pgTable("production_batches", {
   id: serial("id").primaryKey(),
   date: date("date").notNull(),
   batchCode: text("batch_code").notNull(),
+  batchSequence: integer("batch_sequence"),
   notes: text("notes"),
+  remainingRawMilk: decimal("remaining_raw_milk", { precision: 12, scale: 4 }),
+  systemCalculatedRemaining: decimal("system_calculated_remaining", { precision: 12, scale: 4 }),
   createdByUserId: integer("created_by_user_id").notNull().references(() => users.id),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
@@ -240,3 +246,76 @@ export const insertChangeRequestSchema = createInsertSchema(changeRequests).omit
 });
 export type InsertChangeRequest = z.infer<typeof insertChangeRequestSchema>;
 export type ChangeRequest = typeof changeRequests.$inferSelect;
+
+export const lossThresholds = pgTable("loss_thresholds", {
+  id: serial("id").primaryKey(),
+  formulaId: integer("formula_id").references(() => formulas.id),
+  stage: lossStageEnum("stage").notNull(),
+  minLossPercent: decimal("min_loss_percent", { precision: 5, scale: 2 }).notNull().default("0"),
+  maxLossPercent: decimal("max_loss_percent", { precision: 5, scale: 2 }).notNull().default("5"),
+  isGlobal: boolean("is_global").notNull().default(false),
+  active: boolean("active").notNull().default(true),
+});
+
+export const insertLossThresholdSchema = createInsertSchema(lossThresholds).omit({ id: true });
+export type InsertLossThreshold = z.infer<typeof insertLossThresholdSchema>;
+export type LossThreshold = typeof lossThresholds.$inferSelect;
+
+export const carryForwardRequests = pgTable("carry_forward_requests", {
+  id: serial("id").primaryKey(),
+  fromBatchId: integer("from_batch_id").notNull().references(() => productionBatches.id),
+  toBatchId: integer("to_batch_id").references(() => productionBatches.id),
+  amountLitres: decimal("amount_litres", { precision: 12, scale: 4 }).notNull(),
+  systemCalculatedAmount: decimal("system_calculated_amount", { precision: 12, scale: 4 }),
+  status: carryForwardStatusEnum("status").notNull().default("PENDING"),
+  requestedByUserId: integer("requested_by_user_id").notNull().references(() => users.id),
+  requestedAt: timestamp("requested_at").notNull().defaultNow(),
+  reviewedByUserId: integer("reviewed_by_user_id").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  adminComment: text("admin_comment"),
+});
+
+export const insertCarryForwardRequestSchema = createInsertSchema(carryForwardRequests).omit({
+  id: true, requestedAt: true, status: true, reviewedByUserId: true, reviewedAt: true, adminComment: true,
+});
+export type InsertCarryForwardRequest = z.infer<typeof insertCarryForwardRequestSchema>;
+export type CarryForwardRequest = typeof carryForwardRequests.$inferSelect;
+
+export const dailyLocks = pgTable("daily_locks", {
+  id: serial("id").primaryKey(),
+  date: date("date").notNull().unique(),
+  lockedByUserId: integer("locked_by_user_id").notNull().references(() => users.id),
+  lockedAt: timestamp("locked_at").notNull().defaultNow(),
+});
+
+export const insertDailyLockSchema = createInsertSchema(dailyLocks).omit({ id: true, lockedAt: true });
+export type InsertDailyLock = z.infer<typeof insertDailyLockSchema>;
+export type DailyLock = typeof dailyLocks.$inferSelect;
+
+export const adminNotifications = pgTable("admin_notifications", {
+  id: serial("id").primaryKey(),
+  type: notificationTypeEnum("type").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  entityType: text("entity_type"),
+  entityId: integer("entity_id"),
+  severity: text("severity").notNull().default("warning"),
+  isRead: boolean("is_read").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  metadata: jsonb("metadata"),
+});
+
+export const insertAdminNotificationSchema = createInsertSchema(adminNotifications).omit({ id: true, createdAt: true, isRead: true });
+export type InsertAdminNotification = z.infer<typeof insertAdminNotificationSchema>;
+export type AdminNotification = typeof adminNotifications.$inferSelect;
+
+export const customUnits = pgTable("custom_units", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  abbreviation: text("abbreviation").notNull().unique(),
+  active: boolean("active").notNull().default(true),
+});
+
+export const insertCustomUnitSchema = createInsertSchema(customUnits).omit({ id: true });
+export type InsertCustomUnit = z.infer<typeof insertCustomUnitSchema>;
+export type CustomUnit = typeof customUnits.$inferSelect;
