@@ -23,7 +23,7 @@ Preferred communication style: Simple, everyday language.
 - **UI Components:** shadcn/ui (new-york style) built on Radix UI primitives with Tailwind CSS v4 (using `@tailwindcss/vite` plugin)
 - **Charts:** Recharts for variance and mass balance visualizations
 - **Auth Context:** Custom React context in `client/src/lib/auth.tsx` wrapping session-based auth
-- **Key Pages:** Login, Dashboard, Intake, Production, Packouts, Products (admin), Formulas (admin), Approvals (admin), Reports (admin), Running Stock (admin), Daily Allocation (admin), Loss Breakdown (admin), My History (data entry)
+- **Key Pages:** Login, Dashboard, Intake, Production, Packouts, Products (admin), Formulas (admin), Approvals (admin), Reports (admin), Running Stock (admin), Daily Allocation (admin), Loss Breakdown (admin), My History (data entry), Notifications (admin), Loss Thresholds (admin), Daily Locks (admin), Custom Units (admin)
 - **Path aliases:** `@/` maps to `client/src/`, `@shared/` maps to `shared/`
 
 ### Backend Architecture
@@ -51,7 +51,12 @@ Preferred communication style: Simple, everyday language.
 - **conversionFormulas** — formulaId, inputProductId, ratioNumerator, ratioDenominator
 - **blendComponents** — formulaId, componentProductId, fraction
 - **dailyIntakes** — date, supplierId, productId, qty, deliveredQty (optional), acceptedQty (optional), unitType, notes (optional), reviewedAt, reviewedByUserId, adminNotes
-- **productionBatches** / **productionLineItems** — batch tracking with operation types (CONVERT, BLEND); line items have notes, reviewedAt, reviewedByUserId, adminNotes
+- **productionBatches** / **productionLineItems** — batch tracking with operation types (CONVERT, BLEND); batches have remainingRawMilk (clerk-reported), systemCalculatedRemaining, batchSequence; line items have notes, reviewedAt, reviewedByUserId, adminNotes
+- **lossThresholds** — admin-configurable min/max % thresholds per formula or global, for production and packout stages
+- **carryForwardRequests** — clerk requests to carry forward remaining raw milk to next batch, requires admin approval (PENDING/APPROVED/REJECTED)
+- **dailyLocks** — admin locks a date to prevent data entry modifications
+- **adminNotifications** — threshold breach alerts, carry-forward requests, unusual losses (type, title, message, read status)
+- **customUnits** — admin-configurable units of measure beyond defaults (Litre, Kilogram, Unit)
 - **blendActualUsage** — lineItemId, componentProductId, expectedQty, actualQty (tracks per-component actual usage in BLEND operations, CASCADE delete on line item)
 - **packouts** — date, productId, qty, unitType, packSizeLabel, sourceProductId (optional), sourceQtyUsed (optional), notes (optional), reviewedAt, reviewedByUserId, adminNotes
 - **events** — immutable audit ledger (actorUserId, entityType, entityId, action, fieldName, oldValue, newValue)
@@ -102,6 +107,40 @@ Two configurable formula types, both managed through admin UI:
 2. **BLEND** — combines multiple component products by fraction to create an output (e.g., 70% yogurt base + 20% strawberry puree + 10% sugar → strawberry yogurt)
 
 Formulas drive expected yield calculations. The Production page computes expected vs actual input quantities and shows variance percentages.
+
+### Sequential Workflow Enforcement
+The system enforces a strict order: Intake → Production → Packout. Each step checks if the prior step has data for the selected date before allowing new records:
+- API endpoint: `GET /api/workflow/check?date=YYYY-MM-DD&step=production|packout`
+- Intake, Production, and Packout pages all check daily locks and show warnings
+
+### Remaining Raw Milk Tracking
+After completing a production batch, clerks report how much raw milk is left. Admin sees both clerk-reported and system-calculated values with variance badges:
+- PATCH `/api/production/batches/:id/remaining` updates remainingRawMilk
+- System calculates expected remaining from intake minus production usage
+- Variance > 5% shown in red badge (admin only)
+
+### Carry-Forward Workflow
+When a batch has remaining milk, clerks can request to carry it forward to the next batch:
+- POST `/api/carry-forward` creates a pending request
+- Admin approves/rejects via PATCH `/api/carry-forward/:id`
+- Uses clerk's actual remaining figure (not system-calculated)
+
+### Loss Thresholds & Notifications
+Admin-configurable loss thresholds per formula with automatic notifications:
+- Frontend pages: `/loss-thresholds`, `/notifications`
+- Bell icon with unread count badge in admin header bar (polls every 30s)
+- Notifications for: threshold breaches, carry-forward requests, unusual losses
+
+### Daily Locks
+Admin can lock a day to prevent any data entry modifications:
+- Frontend page: `/daily-locks`
+- All data entry pages (Intake, Production, Packout) check locks before allowing edits
+- API: GET/POST/DELETE `/api/daily-locks`
+
+### Custom Units
+Admin can add custom units of measure beyond the three defaults (Litre, Kilogram, Unit):
+- Frontend page: `/custom-units`
+- API: CRUD at `/api/custom-units`
 
 ### Build System
 - **Development:** `npm run dev` starts Express server with Vite dev middleware (HMR via `server/vite.ts`)
