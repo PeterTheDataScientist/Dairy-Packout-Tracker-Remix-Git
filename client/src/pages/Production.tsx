@@ -703,7 +703,8 @@ export default function Production() {
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Batch Code</Label>
-                  <Input value={batchCode} onChange={e => setBatchCode(e.target.value)} className="font-mono text-sm" data-testid="input-batch-code" />
+                  <Input value={batchCode} onChange={e => setBatchCode(e.target.value)} className="font-mono text-sm" data-testid="input-batch-code" readOnly={user?.role !== "ADMIN"} disabled={user?.role !== "ADMIN"} />
+                  {user?.role !== "ADMIN" && <p className="text-[11px] text-muted-foreground">System-generated — only admins can edit</p>}
                 </div>
               </div>
             )}
