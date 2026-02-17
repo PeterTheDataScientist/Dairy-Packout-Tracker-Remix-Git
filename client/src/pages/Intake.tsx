@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { format } from "date-fns";
 
-type Product = { id: number; name: string; unitType: string; isIntermediate: boolean };
+type Product = { id: number; name: string; unitType: string; isIntermediate: boolean; category: string };
 type Supplier = { id: number; name: string; active: boolean };
 type Intake = { id: number; date: string; supplierId: number | null; productId: number; qty: string; unitType: string; deliveredQty: string | null; acceptedQty: string | null; notes: string | null; reviewedAt: string | null; reviewedByUserId: number | null; adminNotes: string | null };
 
@@ -27,7 +27,6 @@ export default function IntakePage() {
   const [formData, setFormData] = useState({
     date: format(new Date(), "yyyy-MM-dd"),
     supplierId: "",
-    productId: "",
     qty: "",
     deliveredQty: "",
     acceptedQty: "",
@@ -46,14 +45,14 @@ export default function IntakePage() {
   const { data: products = [] } = useQuery<Product[]>({ queryKey: ["/api/products"] });
   const { data: suppliers = [] } = useQuery<Supplier[]>({ queryKey: ["/api/suppliers"] });
 
+  const rawMilkProduct = useMemo(() =>
+    products.find(p => p.category === "RAW_MILK"),
+    [products]
+  );
+
   const supplierOptions = useMemo(() =>
     suppliers.filter(s => s.active).map(s => ({ value: String(s.id), label: s.name })).sort((a, b) => a.label.localeCompare(b.label)),
     [suppliers]
-  );
-
-  const productOptions = useMemo(() =>
-    products.map(p => ({ value: String(p.id), label: `${p.name} (${p.unitType})` })).sort((a, b) => a.label.localeCompare(b.label)),
-    [products]
   );
 
   const createMutation = useMutation({
@@ -66,7 +65,7 @@ export default function IntakePage() {
       toast({ title: "Intake Recorded", description: "Delivery has been logged." });
       setIsDialogOpen(false);
       const resetDate = format(new Date(), "yyyy-MM-dd");
-      setFormData({ date: resetDate, supplierId: "", productId: "", qty: "", deliveredQty: "", acceptedQty: "", notes: "" });
+      setFormData({ date: resetDate, supplierId: "", qty: "", deliveredQty: "", acceptedQty: "", notes: "" });
       setIntakeDate(resetDate);
     },
     onError: (err: any) => {
@@ -111,14 +110,13 @@ export default function IntakePage() {
       ? formData.acceptedQty
       : formData.qty;
 
-    if (!formData.productId || !finalQty) return;
-    const product = products.find(p => p.id === parseInt(formData.productId));
+    if (!rawMilkProduct || !finalQty) return;
     createMutation.mutate({
       date: formData.date,
       supplierId: formData.supplierId ? parseInt(formData.supplierId) : null,
-      productId: parseInt(formData.productId),
+      productId: rawMilkProduct.id,
       qty: finalQty,
-      unitType: product?.unitType || "LITER",
+      unitType: "LITER",
       deliveredQty: formData.deliveredQty || null,
       acceptedQty: formData.acceptedQty || null,
       notes: formData.notes || null,
@@ -129,11 +127,10 @@ export default function IntakePage() {
   const getSupplierName = (id: number | null) => (id ? suppliers.find(s => s.id === id)?.name || `#${id}` : "—");
 
   const exportCSV = () => {
-    const headers = ["Date", "Supplier", "Product", "Qty", "Delivered Qty", "Accepted Qty", "Notes", "Status"];
+    const headers = ["Date", "Supplier", "Qty (L)", "Delivered Qty", "Accepted Qty", "Notes", "Status"];
     const rows = intakes.map((i: any) => [
       i.date,
       suppliers.find((s: any) => s.id === i.supplierId)?.name || "",
-      products.find((p: any) => p.id === i.productId)?.name || "",
       i.qty,
       i.deliveredQty || "",
       i.acceptedQty || "",
@@ -152,8 +149,8 @@ export default function IntakePage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">Intake</h2>
-          <p className="text-muted-foreground">Log raw material deliveries from suppliers.</p>
+          <h2 className="text-2xl font-bold tracking-tight">Milk Intake</h2>
+          <p className="text-muted-foreground">Log raw milk deliveries from suppliers (in litres).</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={exportCSV} data-testid="button-export-csv"><Download className="h-4 w-4 mr-1" /> CSV</Button>
@@ -179,12 +176,10 @@ export default function IntakePage() {
             <TableRow className="bg-muted/50">
               <TableHead>Date</TableHead>
               <TableHead>Supplier</TableHead>
-              <TableHead>Product</TableHead>
-              <TableHead className="text-right">Stock Added</TableHead>
+              <TableHead className="text-right">Stock Added (L)</TableHead>
               <TableHead className="text-right">Delivered</TableHead>
               <TableHead className="text-right">Accepted</TableHead>
               {user?.role === "ADMIN" && <TableHead className="text-right">Loss</TableHead>}
-              <TableHead>Unit</TableHead>
               <TableHead>Notes</TableHead>
               {user?.role === "ADMIN" && <TableHead>Review</TableHead>}
             </TableRow>
@@ -199,7 +194,6 @@ export default function IntakePage() {
                 <TableRow key={intake.id} data-testid={`row-intake-${intake.id}`}>
                   <TableCell>{intake.date}</TableCell>
                   <TableCell>{getSupplierName(intake.supplierId)}</TableCell>
-                  <TableCell className="font-medium">{getProductName(intake.productId)}</TableCell>
                   <TableCell className="text-right font-medium">{parseFloat(intake.qty).toLocaleString()}</TableCell>
                   <TableCell className="text-right text-muted-foreground">{intake.deliveredQty ? parseFloat(intake.deliveredQty).toLocaleString() : "—"}</TableCell>
                   <TableCell className="text-right text-muted-foreground">{intake.acceptedQty ? parseFloat(intake.acceptedQty).toLocaleString() : "—"}</TableCell>
@@ -210,7 +204,6 @@ export default function IntakePage() {
                       ) : "—"}
                     </TableCell>
                   )}
-                  <TableCell className="text-muted-foreground text-xs">{intake.unitType}</TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                     {intake.notes || "—"}
                     {intake.reviewedAt && <CheckCircle2 className="inline-block ml-1 h-3.5 w-3.5 text-green-500" />}
@@ -234,7 +227,7 @@ export default function IntakePage() {
             })}
             {intakes.length === 0 && (
               <TableRow>
-                <TableCell colSpan={user?.role === "ADMIN" ? 10 : 8} className="text-center py-8 text-muted-foreground">No intake records yet.</TableCell>
+                <TableCell colSpan={user?.role === "ADMIN" ? 8 : 6} className="text-center py-8 text-muted-foreground">No intake records yet.</TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -244,8 +237,8 @@ export default function IntakePage() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Log Delivery</DialogTitle>
-            <DialogDescription>Record an incoming raw material delivery.</DialogDescription>
+            <DialogTitle>Log Milk Delivery</DialogTitle>
+            <DialogDescription>Record an incoming raw milk delivery from a supplier.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="space-y-2">
@@ -263,16 +256,11 @@ export default function IntakePage() {
                 data-testid="select-intake-supplier"
               />
             </div>
-            <div className="space-y-2">
-              <Label>Product</Label>
-              <SearchableSelect
-                options={productOptions}
-                value={formData.productId}
-                onValueChange={val => setFormData({ ...formData, productId: val })}
-                placeholder="Select product"
-                searchPlaceholder="Search products..."
-                data-testid="select-intake-product"
-              />
+            <div className="p-3 rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+              <div className="flex items-center gap-2">
+                <Milk className="h-4 w-4 text-blue-600" />
+                <span className="text-sm font-medium text-blue-800 dark:text-blue-300">Raw Milk — Litres</span>
+              </div>
             </div>
 
             {!(formData.deliveredQty && formData.acceptedQty) && (
@@ -322,7 +310,7 @@ export default function IntakePage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={createMutation.isPending || (!effectiveQty && !formData.qty)} data-testid="button-save-intake">Save</Button>
+            <Button onClick={handleSave} disabled={createMutation.isPending || !rawMilkProduct || (!effectiveQty && !formData.qty)} data-testid="button-save-intake">Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
