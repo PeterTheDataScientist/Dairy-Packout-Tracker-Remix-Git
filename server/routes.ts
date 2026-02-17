@@ -360,6 +360,13 @@ export async function registerRoutes(
 
   app.post("/api/production/batches", requireAuth, async (req, res) => {
     const date = req.body.date;
+
+    const lock = await storage.getDailyLock(date);
+    if (lock) return res.status(403).json({ message: "This day has been locked by admin." });
+
+    const intakes = await storage.getDailyIntakes(date, date);
+    if (intakes.length === 0) return res.status(400).json({ message: "No intake recorded for this date. Please record intake first." });
+
     const existingBatches = await storage.getProductionBatches(date, date);
     const batchSequence = existingBatches.length + 1;
 
@@ -523,6 +530,14 @@ export async function registerRoutes(
   });
 
   app.post("/api/packouts", requireAuth, async (req, res) => {
+    const date = req.body.date;
+
+    const lock = await storage.getDailyLock(date);
+    if (lock) return res.status(403).json({ message: "This day has been locked by admin." });
+
+    const batches = await storage.getProductionBatches(date, date);
+    if (batches.length === 0) return res.status(400).json({ message: "No production batches recorded for this date. Please complete production first." });
+
     const p = await storage.createPackout({
       ...req.body,
       createdByUserId: req.user!.id,
