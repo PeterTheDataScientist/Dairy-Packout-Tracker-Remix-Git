@@ -1,0 +1,81 @@
+ id  |                       name                       |    type    |                  output_product                  |     input_product      | ratio_numerator | ratio_denominator 
+-----+--------------------------------------------------+------------+--------------------------------------------------+------------------------+-----------------+-------------------
+   4 | Raw Milk to Yogurt Base                          | CONVERSION | YOGURT BASE (BULK)                               | RAW MILK               |          1.0000 |            1.0000
+   5 | Yogurt Base to Double Thick Yogurt               | CONVERSION | YOMILK DOUBLE THICK GREEK YOGURT 20 LTR          | YOGURT BASE (BULK)     |          2.0000 |            1.0000
+   6 | Yogurt Base to Cream Cheese                      | CONVERSION | YOMILK CREAM CHEESE 1L                           | YOGURT BASE (BULK)     |          3.0000 |            1.0000
+   8 | Raw Milk to Fresh Milk                           | CONVERSION | YOMILK FRESH MILK 1 LTR                          | RAW MILK               |          1.0000 |            1.0000
+   9 | Raw Milk to Yolac                                | CONVERSION | YOMILK YOLAC 1L BOTTLE                           | RAW MILK               |          1.1000 |            1.0000
+  10 | Raw Milk to Feta                                 | CONVERSION | YOMILK PLAIN FETA 220G                           | RAW MILK               |          5.0000 |            1.0000
+  12 | Yogurt Base to Plain Yogurt                      | CONVERSION | YOMILK PLAIN YOGURT BOTTLE 1L                    | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  13 | Yogurt Base to Strawberry Yogurt                 | CONVERSION | YOMILK STRAWBERRY YOGURT 1 LTR                   | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  14 | Yogurt Base to Banana Yogurt                     | CONVERSION | YOMILK BANANA YOGURT 1 LTR                       | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  15 | Yogurt Base to Passion Fruit Yogurt              | CONVERSION | YOMILK PASSION FRUIT YOGURT 1 LTR                | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  16 | Yogurt Base to Vanilla Yogurt                    | CONVERSION | YOMILK VANILLA YOGURT 1 LTR                      | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  17 | Yogurt Base to Probiotic Yogurt                  | CONVERSION | ZIM DELI PROBIO DRINKING YOGURT 1 LTR            | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  22 | Cream Cheese to Cucumber & Dill Dip              | CONVERSION | ZIM DELI CREAM CHEESE CUCUMBER AND DILL DIP 250g | YOMILK CREAM CHEESE 1L |          1.0000 |            1.0000
+  23 | Cream Cheese to Black Pepper Dip                 | CONVERSION | ZIM DELI CREAM CHEESE BLACK PEPPER DIP 250g      | YOMILK CREAM CHEESE 1L |          1.0000 |            1.0000
+  24 | Cream Cheese to Sweet Chilli Dip                 | CONVERSION | ZIM DELI CREAM CHEESE SWEET CHILLI DIP 250g      | YOMILK CREAM CHEESE 1L |          1.0000 |            1.0000
+  25 | Cream Cheese to Creamy Avo Dip                   | CONVERSION | KAVA CREAMY AVO DIP 250g                         | YOMILK CREAM CHEESE 1L |          1.0000 |            1.0000
+  26 | Cream Cheese to Kava Cucumber Dill Dip           | CONVERSION | KAVA CUCUMBER AND DILL DIP 250g                  | YOMILK CREAM CHEESE 1L |          1.0000 |            1.0000
+  27 | Cream Cheese to Biltong Dip                      | CONVERSION | ZIM DELI BILTONG DIP 250g                        | YOMILK CREAM CHEESE 1L |          1.0000 |            1.0000
+  28 | Cream Cheese to Mexican Chilli Dip               | CONVERSION | ZIM DELI MEXICAN CHILLI DIP 250g                 | YOMILK CREAM CHEESE 1L |          1.0000 |            1.0000
+  29 | Cream Cheese to Garlic Dip                       | CONVERSION | ZIM DELI GARLIC DIP 250g                         | YOMILK CREAM CHEESE 1L |          1.0000 |            1.0000
+  30 | Raw Milk to Harry's Fresh Milk 1L                | CONVERSION | HARRY'S FRESH MILK 1 LTR                         | RAW MILK               |          1.0000 |            1.0000
+  31 | Raw Milk to Harry's Fresh Milk 2L                | CONVERSION | HARRY'S FRESH MILK 2 LTR                         | RAW MILK               |          1.0000 |            1.0000
+  32 | Raw Milk to Kava Fresh Milk 1L                   | CONVERSION | KAVA FRESH MILK 1 LTR                            | RAW MILK               |          1.0000 |            1.0000
+  33 | Raw Milk to Kava Fresh Milk 2L                   | CONVERSION | KAVA FRESH MILK 2 LTR                            | RAW MILK               |          1.0000 |            1.0000
+  34 | Raw Milk to YoMilk Fresh Milk 2L                 | CONVERSION | YOMILK FRESH MILK 2 LTR                          | RAW MILK               |          1.0000 |            1.0000
+  35 | Raw Milk to YoMilk Fresh Milk 5L Blue Lid        | CONVERSION | YOMILK FRESH MILK 5 LTR BOTTLE-BLUE LID          | RAW MILK               |          1.0000 |            1.0000
+  36 | Raw Milk to YoMilk Fresh Milk 500ml Sachet       | CONVERSION | YOMILK FRESH MILK 500 ML SACHET                  | RAW MILK               |          1.0000 |            1.0000
+  37 | Raw Milk to YoMilk Barista 1L                    | CONVERSION | YOMILK FRESH MILK GOLD CAP BARISTA 1L            | RAW MILK               |          1.0000 |            1.0000
+  38 | Raw Milk to YoMilk Barista 2L                    | CONVERSION | YOMILK FRESH MILK GOLD CAP BARISTA 2L            | RAW MILK               |          1.0000 |            1.0000
+  39 | Raw Milk to YoMilk Barista 5L                    | CONVERSION | YOMILK FRESH MILK GOLD CAP BARISTA 5L            | RAW MILK               |          1.0000 |            1.0000
+  40 | Raw Milk to Yolac 2L                             | CONVERSION | YOMILK YOLAC 2L BOTTLE                           | RAW MILK               |          1.1000 |            1.0000
+  41 | Raw Milk to Yolac 500ml Sachet                   | CONVERSION | YOMILK YOLAC SACHET 500ML                        | RAW MILK               |          1.1000 |            1.0000
+  42 | Raw Milk to Feta 440g                            | CONVERSION | YOMILK PLAIN FETA 440G                           | RAW MILK               |          5.0000 |            1.0000
+  43 | Yogurt Base to Cream Cheese 250g                 | CONVERSION | YOMILK CREAM CHEESE 250G                         | YOGURT BASE (BULK)     |          3.0000 |            1.0000
+  44 | Raw Milk to Yogurt Base 20L Bucket               | CONVERSION | YOGURT BASE 20L BUCKET                           | RAW MILK               |          1.0000 |            1.0000
+  45 | Yogurt Base to Probio Tub 1kg                    | CONVERSION | ZIM DELI D-THICK PROBIO YOGURT TUB 1kg           | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  46 | Yogurt Base to Probio Tub 500g                   | CONVERSION | ZIM DELI D-THICK PROBIO YOGURT TUB 500g          | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  47 | Yogurt Base to Probio Pouring 250ml              | CONVERSION | ZIM DELI PROBIO POURING 250ML                    | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  54 | Yogurt Base to D-Thick Greek 175g                | CONVERSION | ZIM DELI D-THICK GREEK YOGURT TUB 175g           | YOGURT BASE (BULK)     |          2.0000 |            1.0000
+  55 | Yogurt Base to D-Thick Greek 1kg                 | CONVERSION | ZIM DELI D-THICK GREEK YOGURT TUB 1kg            | YOGURT BASE (BULK)     |          2.0000 |            1.0000
+  56 | Yogurt Base to D-Thick Greek 500g                | CONVERSION | ZIM DELI D-THICK GREEK YOGURT TUB 500g           | YOGURT BASE (BULK)     |          2.0000 |            1.0000
+  68 | Yogurt Base to Strawberry Yogurt Sachet 200ml    | CONVERSION | YOMILK STRAWBERRY YOGURT SACHET 200ML            | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  69 | Yogurt Base to Banana Yogurt Sachet 200ml        | CONVERSION | YOMILK BANANA YOGURT SACHET 200ML                | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  70 | Yogurt Base to Passion Fruit Yogurt Sachet 200ml | CONVERSION | YOMILK PASSION FRUIT YOGURT SACHET 200ML         | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  71 | Yogurt Base to Vanilla Yogurt Sachet 200ml       | CONVERSION | YOMILK VANILLA YOGURT SACHET 200ML               | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  72 | Yogurt Base to Banana Yogurt Bottle 250ml        | CONVERSION | YOMILK BANANA YOGURT BOTTLE 250ML                | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  73 | Yogurt Base to Strawberry Yogurt Bottle 250ml    | CONVERSION | YOMILK STRAWBERRY YOGURT BOTTLE 250ML            | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  74 | Yogurt Base to Passion Fruit Yogurt Bottle 250ml | CONVERSION | YOMILK PASSION FRUIT YOGURT BOTTLE 250ML         | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  75 | Yogurt Base to Vanilla Yogurt Bottle 250ml       | CONVERSION | YOMILK VANILLA YOGURT BOTTLE 250ML               | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  76 | Yogurt Base to 3 Berry Fruit Split 150g          | CONVERSION | YOMILK 3 BERRY FRUIT SPLIT YOGURT 150G           | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  77 | Yogurt Base to Passion Fruit Split 150g          | CONVERSION | YOMILK PASSION FRUIT SPLIT YOGURT 150G           | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  78 | Yogurt Base to Strawberry Fruit Split 150g       | CONVERSION | YOMILK STRAWBERRY FRUIT SPLIT YOGURT 150G        | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  79 | Yogurt Base to Raspberry Fruit Split 150g        | CONVERSION | YOMILK RASPBERRY FRUIT SPLIT YOGURT 150G         | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  80 | Yogurt Base to DTY BASE                          | CONVERSION | DTY BASE (BULK)                                  | YOGURT BASE (BULK)     |          2.0000 |            1.0000
+  81 | Yogurt Base to SMOOTHIE BASE                     | CONVERSION | SMOOTHIE BASE (BULK)                             | YOGURT BASE (BULK)     |          1.0000 |            1.0000
+  82 | Strawberry DTY Blend 175g                        | BLEND      | ZIM DELI D-THICK STRAWBERRY YOGURT TUB 175g      |                        |                 |                  
+  83 | Strawberry DTY Blend 500g                        | BLEND      | ZIM DELI D-THICK STRAWBERRY YOGURT TUB 500g      |                        |                 |                  
+  84 | Strawberry DTY Blend 1kg                         | BLEND      | ZIM DELI D-THICK STRAWBERRY YOGURT TUB 1kg       |                        |                 |                  
+  85 | Passion DTY Blend 175g                           | BLEND      | ZIM DELI D-THICK PASSION YOGURT TUB 175g         |                        |                 |                  
+  86 | Passion DTY Blend 500g                           | BLEND      | ZIM DELI D-THICK PASSION YOGURT TUB 500g         |                        |                 |                  
+  87 | Passion DTY Blend 1kg                            | BLEND      | ZIM DELI D-THICK PASSION YOGURT TUB 1kg          |                        |                 |                  
+  88 | Vanilla DTY Blend 175g                           | BLEND      | ZIM DELI D-THICK VANILLA YOGURT TUB 175g         |                        |                 |                  
+  89 | Vanilla DTY Blend 500g                           | BLEND      | ZIM DELI D-THICK VANILLA YOGURT TUB 500g         |                        |                 |                  
+  90 | Vanilla DTY Blend 1kg                            | BLEND      | ZIM DELI D-THICK VANILLA YOGURT TUB 1kg          |                        |                 |                  
+  91 | Raspberry DTY Blend 500g                         | BLEND      | ZIM DELI D-THICK RASPBERRY YOGURT TUB 500g       |                        |                 |                  
+  92 | Raspberry DTY Blend 1kg                          | BLEND      | ZIM DELI D-THICK RASPBERRY YOGURT TUB 1kg        |                        |                 |                  
+  93 | Mixed Berry DTY Blend 175g                       | BLEND      | ZIM DELI D-THICK MIXED BERRY YOGURT TUB 175g     |                        |                 |                  
+  94 | Mixed Berry DTY Blend 500g                       | BLEND      | ZIM DELI D-THICK MIXED BERRY YOGURT TUB 500g     |                        |                 |                  
+  95 | Mixed Berry DTY Blend 1kg                        | BLEND      | ZIM DELI D-THICK MIXED BERRY YOGURT TUB 1kg      |                        |                 |                  
+  96 | Coconut DTY Blend 175g                           | BLEND      | ZIM DELI D-THICK COCONUT YOGURT TUB 175g         |                        |                 |                  
+  97 | Coconut DTY Blend 500g                           | BLEND      | ZIM DELI D-THICK COCONUT YOGURT TUB 500g         |                        |                 |                  
+  98 | Coconut DTY Blend 1kg                            | BLEND      | ZIM DELI D-THICK COCONUT YOGURT TUB 1kg          |                        |                 |                  
+  99 | Strawberry Smoothie Blend                        | BLEND      | YOMILK YO' SMOOTHY STRAWBERRY 300ML              |                        |                 |                  
+ 100 | Passion Fruit Smoothie Blend                     | BLEND      | YOMILK YO' SMOOTHY PASSION FRUIT 300ML           |                        |                 |                  
+ 101 | Mixed Berry Smoothie Blend                       | BLEND      | YOMILK YO' SMOOTHY MIXED BERRY 300ML             |                        |                 |                  
+ 102 | Pina Colada Smoothie Blend                       | BLEND      | YOMILK YO' SMOOTHY PINA COLADA 300ML             |                        |                 |                  
+ 103 | Mango Smoothie Blend                             | BLEND      | YOMILK YO' SMOOTHY MANGO 300ML                   |                        |                 |                  
+(77 rows)
+
