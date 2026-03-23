@@ -822,6 +822,41 @@ export async function registerRoutes(
 
     res.json(active);
   });
+  // --- PRODUCT STOCK (for packout availability check) ---
+  app.get("/api/stock/products", requireAuth, async (_req, res) => {
+    const allProducts = await storage.getProducts();
+    const allLineItems = await storage.getAllLineItems();
+    const allPackouts = await storage.getPackouts();
+
+    const result = allProducts
+      .filter(
+        (p) =>
+          !p.isIngredientOnly &&
+          !p.isIntermediate &&
+          p.category !== "RAW_MILK" &&
+          p.active,
+      )
+      .map((p) => {
+        const totalProduced = allLineItems
+          .filter((li) => li.outputProductId === p.id)
+          .reduce((acc, li) => acc + parseFloat(li.outputQty), 0);
+        const totalPacked = allPackouts
+          .filter((po) => po.productId === p.id)
+          .reduce((acc, po) => acc + parseFloat(po.qty), 0);
+        return {
+          productId: p.id,
+          productName: p.name,
+          category: p.category,
+          unitType: p.unitType,
+          totalProduced: Math.round(totalProduced * 100) / 100,
+          totalPacked: Math.round(totalPacked * 100) / 100,
+          available: Math.round((totalProduced - totalPacked) * 100) / 100,
+        };
+      })
+      .filter((s) => s.totalProduced > 0);
+
+    res.json(result);
+  });
   // --- PACKOUTS ---
   app.get("/api/packouts", requireAuth, async (req, res) => {
     const { dateFrom, dateTo } = req.query;
@@ -836,12 +871,15 @@ export async function registerRoutes(
     const date = req.body.date;
     const lock = await storage.getDailyLock(date);
     if (lock)
-      return res.status(403).json({ message: "This day has been locked by admin." });
+      return res
+        .status(403)
+        .json({ message: "This day has been locked by admin." });
 
     const batches = await storage.getProductionBatches(date, date);
     if (batches.length === 0)
       return res.status(400).json({
-        message: "No production batches recorded for this date. Please complete production first.",
+        message:
+          "No production batches recorded for this date. Please complete production first.",
       });
 
     // Stock check: cannot pack more than what has been produced minus already packed
@@ -851,15 +889,15 @@ export async function registerRoutes(
       const allPackouts = await storage.getPackouts();
       const allProducts = await storage.getProducts();
 
-      const product = allProducts.find(p => p.id === parseInt(productId));
+      const product = allProducts.find((p) => p.id === parseInt(productId));
 
       // Calculate available stock for this product
       const totalProduced = allLineItems
-        .filter(li => li.outputProductId === parseInt(productId))
+        .filter((li) => li.outputProductId === parseInt(productId))
         .reduce((acc, li) => acc + parseFloat(li.outputQty), 0);
 
       const totalAlreadyPacked = allPackouts
-        .filter(po => po.productId === parseInt(productId))
+        .filter((po) => po.productId === parseInt(productId))
         .reduce((acc, po) => acc + parseFloat(po.qty), 0);
 
       // For unit products, convert using packSizeQty
@@ -898,7 +936,7 @@ export async function registerRoutes(
     });
     res.status(201).json(p);
   });
-  
+
   app.put("/api/packouts/:id", requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id);
     const existing = await storage.getPackout(id);
