@@ -548,27 +548,7 @@ export async function registerRoutes(
     const body = { ...req.body };
     let inputAutoFilled = false;
 
-    // FIX: Base stock gate — check Layer 2 intermediate stock before allowing Layer 3 production.
-    // Admins can always proceed (they may be correcting historical data).
-    // DATA_ENTRY clerks are blocked if the required base product has no stock.
-    if (req.user!.role === "DATA_ENTRY" && body.operationType === "CONVERT") {
-      const requiredInput = await getRequiredInputForOutput(
-        body.outputProductId,
-      );
-      if (requiredInput) {
-        const baseStock = await getCumulativeProductStock(
-          requiredInput.inputProductId,
-        );
-        if (baseStock <= 0) {
-          return res.status(400).json({
-            message: `No ${requiredInput.inputProductName} in stock. Please produce ${requiredInput.inputProductName} first before recording this product.`,
-            missingBase: requiredInput.inputProductName,
-            availableStock: 0,
-          });
-        }
-      }
-    }
-
+    // STEP 1: Auto-fill input qty from formula FIRST
     if (
       body.operationType === "CONVERT" &&
       (!body.inputQty || body.inputQty === "")
@@ -585,6 +565,49 @@ export async function registerRoutes(
       }
     }
 
+    // STEP 2: Now check base stock (zero-stock gate for intermediates)
+    if (req.user!.role === "DATA_ENTRY" && body.operationType === "CONVERT") {
+      const requiredInput = await getRequiredInputForOutput(body.outputProductId);
+      if (requiredInput) {
+        const baseStock = await getCumulativeProductStock(requiredInput.inputProductId);
+        if (baseStock <= 0) {
+          return res.status(400).json({
+            message: `No ${requiredInput.inputProductName} in stock. Please produce ${requiredInput.inputProductName} first before recording this product.`,
+            missingBase: requiredInput.inputProductName,
+            availableStock: 0,
+          });
+        }
+      }
+    }
+
+    // STEP 3: Now check quantity is sufficient (uses auto-filled inputQty)
+    if (body.operationType === "CONVERT" && body.inputProductId) {
+      const allProducts = await storage.getProducts();
+      const inputProduct = allProducts.find((p) => p.id === body.inputProductId);
+      const requestedInput = parseFloat(body.inputQty || "0");
+
+      if (inputProduct?.category === "RAW_MILK" && requestedInput > 0) {
+        const availableRawMilk = await getCumulativeRawMilkStock();
+        if (requestedInput > availableRawMilk) {
+          return res.status(400).json({
+            message: `Not enough raw milk. To produce this you need ${requestedInput.toLocaleString()}L but only ${availableRawMilk.toFixed(1)}L is available.`,
+            available: availableRawMilk,
+            requested: requestedInput,
+          });
+        }
+      } else if (inputProduct?.isIntermediate && requestedInput > 0) {
+        const availableStock = await getCumulativeProductStock(body.inputProductId);
+        if (requestedInput > availableStock) {
+          return res.status(400).json({
+            message: `Not enough ${inputProduct.name}. You need ${requestedInput.toLocaleString()} but only ${availableStock.toFixed(1)} is available.`,
+            available: availableStock,
+            requested: requestedInput,
+          });
+        }
+      }
+    }
+
+    // STEP 4: Save
     const l = await storage.createLineItem({
       ...body,
       createdByUserId: req.user!.id,
@@ -908,14 +931,14 @@ export async function registerRoutes(
 
       const availableStock = totalProduced - totalAlreadyPacked;
 
-        if (totalProduced <= 0) {
-          return res.status(400).json({
-            message: `No production recorded for this product. You must produce it before packing it out.`,
-            availableStock: 0,
-            totalProduced: 0,
-          });
-        }
-        if (requestedInBaseUnit > availableStock) {
+      if (totalProduced <= 0) {
+        return res.status(400).json({
+          message: `No production recorded for this product. You must produce it before packing it out.`,
+          availableStock: 0,
+          totalProduced: 0,
+        });
+      }
+      if (requestedInBaseUnit > availableStock) {
         return res.status(400).json({
           message: `Cannot pack ${parseFloat(qty).toLocaleString()} ${product?.unitType === "UNIT" ? "units" : product?.unitType} — only ${availableStock.toFixed(1)} available in stock (${totalProduced.toFixed(1)} produced, ${totalAlreadyPacked.toFixed(1)} already packed).`,
           availableStock,
