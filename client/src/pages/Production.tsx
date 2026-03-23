@@ -967,7 +967,7 @@ export default function Production() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {lineItems.map((log) => (
+      {[...lineItems].sort((a, b) => b.id - a.id).map((log) => (
               <TableRow key={log.id} data-testid={`row-production-${log.id}`}>
                 <TableCell className="font-medium font-mono text-xs">
                   <span>{log.batchCode}</span>
