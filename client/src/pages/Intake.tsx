@@ -192,7 +192,7 @@ export default function IntakePage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {intakes.map((intake) => {
+      {[...intakes].sort((a, b) => b.id - a.id).map((intake) => {
               const delivered = intake.deliveredQty ? parseFloat(intake.deliveredQty) : null;
               const accepted = intake.acceptedQty ? parseFloat(intake.acceptedQty) : parseFloat(intake.qty);
               const lossAmt = delivered ? delivered - accepted : 0;

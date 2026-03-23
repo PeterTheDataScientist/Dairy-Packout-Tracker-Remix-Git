@@ -117,7 +117,7 @@ export default function MyHistory() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {intakes.map((intake) => {
+      {[...intakes].sort((a, b) => b.id - a.id).map((intake) => {
                 const hasPending = !!getPendingCR("daily_intake", intake.id, "qty");
                 return (
                   <TableRow key={intake.id} data-testid={`row-intake-history-${intake.id}`} className={hasPending ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}>
@@ -162,7 +162,7 @@ export default function MyHistory() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {lineItems.map((log) => {
+      {[...lineItems].sort((a, b) => b.id - a.id).map((log) => {
                 const hasPending = !!getPendingCR("production_line_item", log.id, "outputQty");
                 return (
                   <TableRow key={log.id} data-testid={`row-history-${log.id}`} className={hasPending ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}>
@@ -208,7 +208,7 @@ export default function MyHistory() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {packouts.map((p) => {
+      {[...packouts].sort((a, b) => b.id - a.id).map((p) => {
                 const hasPending = !!getPendingCR("packout", p.id, "qty");
                 return (
                   <TableRow key={p.id} data-testid={`row-packout-history-${p.id}`} className={hasPending ? "bg-amber-50/50 dark:bg-amber-950/10" : ""}>
