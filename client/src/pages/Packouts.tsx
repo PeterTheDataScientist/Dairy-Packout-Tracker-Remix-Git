@@ -843,12 +843,7 @@ export default function Packouts() {
             </Button>
             <Button
               onClick={handleSave}
-              disabled={
-                createMutation.isPending ||
-                !formData.productId ||
-                !formData.qty ||
-                !!qtyWarning
-              }
+              disabled={createMutation.isPending || !formData.productId || !formData.qty || !!qtyWarning || !selectedStock || selectedStock.available <= 0}
               data-testid="button-save-packout"
             >
               {createMutation.isPending ? "Saving..." : "Save Packout"}

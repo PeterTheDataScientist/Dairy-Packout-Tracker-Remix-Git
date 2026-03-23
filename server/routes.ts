@@ -908,7 +908,14 @@ export async function registerRoutes(
 
       const availableStock = totalProduced - totalAlreadyPacked;
 
-      if (totalProduced > 0 && requestedInBaseUnit > availableStock) {
+        if (totalProduced <= 0) {
+          return res.status(400).json({
+            message: `No production recorded for this product. You must produce it before packing it out.`,
+            availableStock: 0,
+            totalProduced: 0,
+          });
+        }
+        if (requestedInBaseUnit > availableStock) {
         return res.status(400).json({
           message: `Cannot pack ${parseFloat(qty).toLocaleString()} ${product?.unitType === "UNIT" ? "units" : product?.unitType} — only ${availableStock.toFixed(1)} available in stock (${totalProduced.toFixed(1)} produced, ${totalAlreadyPacked.toFixed(1)} already packed).`,
           availableStock,
