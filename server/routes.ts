@@ -836,15 +836,50 @@ export async function registerRoutes(
     const date = req.body.date;
     const lock = await storage.getDailyLock(date);
     if (lock)
-      return res
-        .status(403)
-        .json({ message: "This day has been locked by admin." });
+      return res.status(403).json({ message: "This day has been locked by admin." });
+
     const batches = await storage.getProductionBatches(date, date);
     if (batches.length === 0)
       return res.status(400).json({
-        message:
-          "No production batches recorded for this date. Please complete production first.",
+        message: "No production batches recorded for this date. Please complete production first.",
       });
+
+    // Stock check: cannot pack more than what has been produced minus already packed
+    const { productId, qty } = req.body;
+    if (productId && qty) {
+      const allLineItems = await storage.getAllLineItems();
+      const allPackouts = await storage.getPackouts();
+      const allProducts = await storage.getProducts();
+
+      const product = allProducts.find(p => p.id === parseInt(productId));
+
+      // Calculate available stock for this product
+      const totalProduced = allLineItems
+        .filter(li => li.outputProductId === parseInt(productId))
+        .reduce((acc, li) => acc + parseFloat(li.outputQty), 0);
+
+      const totalAlreadyPacked = allPackouts
+        .filter(po => po.productId === parseInt(productId))
+        .reduce((acc, po) => acc + parseFloat(po.qty), 0);
+
+      // For unit products, convert using packSizeQty
+      let requestedInBaseUnit = parseFloat(qty);
+      if (product?.unitType === "UNIT" && product?.packSizeQty) {
+        requestedInBaseUnit = parseFloat(qty) * parseFloat(product.packSizeQty);
+      }
+
+      const availableStock = totalProduced - totalAlreadyPacked;
+
+      if (totalProduced > 0 && requestedInBaseUnit > availableStock) {
+        return res.status(400).json({
+          message: `Cannot pack ${parseFloat(qty).toLocaleString()} ${product?.unitType === "UNIT" ? "units" : product?.unitType} — only ${availableStock.toFixed(1)} available in stock (${totalProduced.toFixed(1)} produced, ${totalAlreadyPacked.toFixed(1)} already packed).`,
+          availableStock,
+          totalProduced,
+          totalAlreadyPacked,
+        });
+      }
+    }
+
     const p = await storage.createPackout({
       ...req.body,
       createdByUserId: req.user!.id,
@@ -863,7 +898,7 @@ export async function registerRoutes(
     });
     res.status(201).json(p);
   });
-
+  
   app.put("/api/packouts/:id", requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id);
     const existing = await storage.getPackout(id);
